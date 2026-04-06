@@ -1,0 +1,27 @@
+# Database — nunca commitar os arquivos locais
+data/portfolio.db
+data/*.db
+
+# Streamlit secrets — nunca commitar com senhas reais
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+
+# Env
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
