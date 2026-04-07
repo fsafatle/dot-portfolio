@@ -9,6 +9,28 @@ Configuração em .streamlit/secrets.toml:
 
 import streamlit as st
 
+_LOGIN_CSS = """
+<style>
+/* Botão Entrar */
+button[kind="secondaryFormSubmit"],
+button[kind="secondary"],
+div.stButton > button {
+    background-color: #FA9B5A !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+div.stButton > button:hover {
+    background-color: #e8894a !important;
+    color: white !important;
+}
+/* Esconde rodapé Streamlit */
+footer {visibility: hidden;}
+#MainMenu {visibility: hidden;}
+</style>
+"""
+
 
 def _get_users() -> dict[str, str]:
     """Retorna {username: password} do secrets.toml."""
@@ -35,15 +57,19 @@ def show_login() -> None:
         layout="centered",
     )
 
-    # Espaço vertical
+    # CSS global — deve vir antes dos widgets
+    st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
+
     st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown(
             "<div style='text-align:center;margin-bottom:32px;line-height:1'>"
-            "<span style='font-size:2.4rem;font-weight:700;letter-spacing:-1px;display:block;margin:0;padding:0'>DOT</span>"
-            "<span style='color:#929292;font-size:0.95rem;display:block;margin:4px 0 0 0;padding:0'>Portfolio Management</span>"
+            "<span style='font-size:2.4rem;font-weight:700;letter-spacing:-1px;"
+            "display:block;margin:0;padding:0'>DOT</span>"
+            "<span style='color:#929292;font-size:0.95rem;display:block;"
+            "margin:4px 0 0 0;padding:0'>Portfolio Management</span>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -51,22 +77,6 @@ def show_login() -> None:
         username = st.text_input("Usuário", placeholder="seu usuário")
         password = st.text_input("Senha", type="password", placeholder="••••••••")
 
-        st.markdown("""
-            <style>
-            div.stButton > button {
-                background-color: #FA9B5A;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-weight: 600;
-                width: 100%;
-            }
-            div.stButton > button:hover {
-                background-color: #e8894a;
-                color: white;
-            }
-            </style>
-        """, unsafe_allow_html=True)
         if st.button("Entrar", use_container_width=True):
             users = _get_users()
             if username in users and users[username] == password:
