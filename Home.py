@@ -8,6 +8,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
+from app.ui.auth import show_login, show_logout_button
+
+# ── Autenticação ──────────────────────────────────────────────────────────────
+show_login()
+
+# ── Navegação (só chega aqui se autenticado) ──────────────────────────────────
+show_logout_button()
 
 pg = st.navigation(
     {
