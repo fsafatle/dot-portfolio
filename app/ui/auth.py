@@ -51,7 +51,23 @@ def show_login() -> None:
         username = st.text_input("Usuário", placeholder="seu usuário")
         password = st.text_input("Senha", type="password", placeholder="••••••••")
 
-        if st.button("Entrar", use_container_width=True, type="primary"):
+        st.markdown("""
+            <style>
+            div.stButton > button {
+                background-color: #FA9B5A;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-weight: 600;
+                width: 100%;
+            }
+            div.stButton > button:hover {
+                background-color: #e8894a;
+                color: white;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        if st.button("Entrar", use_container_width=True):
             users = _get_users()
             if username in users and users[username] == password:
                 st.session_state.authenticated = True
