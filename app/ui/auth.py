@@ -104,16 +104,13 @@ def show_logout_button() -> None:
         st.markdown(
             """
             <a href="?logout=1" style="
-                display:block;
-                width:100%;
-                box-sizing:border-box;
-                text-align:center;
-                padding:8px 12px;
+                display:inline-block;
+                padding:5px 16px;
                 border:1px solid rgba(255,255,255,0.4);
                 border-radius:6px;
                 color:#FFFFFF;
                 text-decoration:none;
-                font-size:0.875rem;
+                font-size:0.8rem;
                 font-weight:500;
                 margin-top:4px;
             ">Sair</a>
