@@ -41,9 +41,9 @@ def show_login() -> None:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown(
-            "<div style='text-align:center;margin-bottom:32px'>"
-            "<h1 style='font-size:2.4rem;letter-spacing:-1px;margin-bottom:2px'>DOT</h1>"
-            "<p style='color:#929292;margin:0'>Portfolio Management</p>"
+            "<div style='text-align:center;margin-bottom:32px;line-height:1'>"
+            "<span style='font-size:2.4rem;font-weight:700;letter-spacing:-1px;display:block;margin:0;padding:0'>DOT</span>"
+            "<span style='color:#929292;font-size:0.95rem;display:block;margin:4px 0 0 0;padding:0'>Portfolio Management</span>"
             "</div>",
             unsafe_allow_html=True,
         )
