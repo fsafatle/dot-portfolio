@@ -90,12 +90,33 @@ _SIDEBAR_CSS = """
 
 
 def show_logout_button() -> None:
+    # detecta clique no botao Sair via query param
+    if st.query_params.get("logout") == "1":
+        st.session_state.authenticated = False
+        st.session_state.pop("username", None)
+        st.query_params.clear()
+        st.rerun()
+
     with st.sidebar:
-        st.markdown(_SIDEBAR_CSS, unsafe_allow_html=True)
         st.markdown("---")
         user = st.session_state.get("username", "")
         st.caption(f"👤 {user}")
-        if st.button("Sair", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.pop("username", None)
-            st.rerun()
+        st.markdown(
+            """
+            <a href="?logout=1" style="
+                display:block;
+                width:100%;
+                box-sizing:border-box;
+                text-align:center;
+                padding:8px 12px;
+                border:1px solid rgba(255,255,255,0.4);
+                border-radius:6px;
+                color:#FFFFFF;
+                text-decoration:none;
+                font-size:0.875rem;
+                font-weight:500;
+                margin-top:4px;
+            ">Sair</a>
+            """,
+            unsafe_allow_html=True,
+        )
