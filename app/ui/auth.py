@@ -13,8 +13,6 @@ _CSS = """
 <style>
 footer {visibility: hidden;}
 #MainMenu {visibility: hidden;}
-/* debug: forca texto do botao preto para ser visivel */
-button { color: #000000 !important; }
 </style>
 """
 
@@ -75,8 +73,25 @@ def show_login() -> None:
     st.stop()
 
 
+_SIDEBAR_CSS = """
+<style>
+[data-testid="stSidebar"] button {
+    background-color: transparent !important;
+    background: transparent !important;
+    border: 1px solid rgba(255,255,255,0.35) !important;
+    color: #FFFFFF !important;
+}
+[data-testid="stSidebar"] button:hover {
+    border-color: rgba(255,255,255,0.7) !important;
+    color: #FFFFFF !important;
+}
+</style>
+"""
+
+
 def show_logout_button() -> None:
     with st.sidebar:
+        st.markdown(_SIDEBAR_CSS, unsafe_allow_html=True)
         st.markdown("---")
         user = st.session_state.get("username", "")
         st.caption(f"👤 {user}")
