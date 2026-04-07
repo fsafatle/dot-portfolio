@@ -9,6 +9,35 @@ Configuração em .streamlit/secrets.toml:
 
 import streamlit as st
 
+_CSS = """
+<style>
+/* Todos os seletores possíveis de botão no Streamlit 1.36+ */
+div.stFormSubmitButton > button,
+div.stFormSubmitButton button,
+div[data-testid="stFormSubmitButton"] > button,
+div[data-testid="stFormSubmitButton"] button,
+button[data-testid="baseButton-secondaryFormSubmit"],
+button[data-testid="baseButton-primaryFormSubmit"],
+button[kind="primaryFormSubmit"],
+button[kind="secondaryFormSubmit"] {
+    background-color: #FA9B5A !important;
+    background: #FA9B5A !important;
+    color: #FFFFFF !important;
+    border: 1px solid #FA9B5A !important;
+    font-weight: 600 !important;
+}
+div.stFormSubmitButton > button:hover,
+div[data-testid="stFormSubmitButton"] button:hover {
+    background-color: #e8894a !important;
+    background: #e8894a !important;
+    border-color: #e8894a !important;
+}
+footer {visibility: hidden;}
+#MainMenu {visibility: hidden;}
+[data-testid="stForm"] {border: none !important; padding: 0 !important;}
+</style>
+"""
+
 
 def _get_users() -> dict[str, str]:
     try:
@@ -33,16 +62,7 @@ def show_login() -> None:
         layout="centered",
     )
 
-    st.markdown("""
-        <style>
-        footer {visibility: hidden;}
-        #MainMenu {visibility: hidden;}
-        [data-testid="stForm"] {
-            border: none !important;
-            padding: 0 !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown(_CSS, unsafe_allow_html=True)
 
     st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
 
@@ -61,11 +81,7 @@ def show_login() -> None:
         with st.form("login_form"):
             username = st.text_input("Usuário", placeholder="seu usuário")
             password = st.text_input("Senha", type="password", placeholder="••••••••")
-            submitted = st.form_submit_button(
-                "Entrar",
-                use_container_width=True,
-                type="primary",
-            )
+            submitted = st.form_submit_button("Entrar", use_container_width=True, type="primary")
 
         if submitted:
             users = _get_users()
