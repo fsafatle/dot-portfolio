@@ -174,7 +174,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
             f"<h1>{portfolio_cfg['flag']} {portfolio_cfg['name']}"
             f"<span class='dot-mark'></span></h1>"
             f"<p style='color:#ABABAB;font-size:0.8rem;margin-top:-8px;'>"
-            f"Performance dashboard · {currency}</p>",
+            f"Performance dashboard · {currency} · teste GitHub Desktop</p>",
             unsafe_allow_html=True,
         )
     with col_refresh:
