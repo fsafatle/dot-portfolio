@@ -9,31 +9,8 @@ Configuração em .streamlit/secrets.toml:
 
 import streamlit as st
 
-_LOGIN_CSS = """
-<style>
-/* Botão Entrar */
-button[kind="secondaryFormSubmit"],
-button[kind="secondary"],
-div.stButton > button {
-    background-color: #FA9B5A !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-}
-div.stButton > button:hover {
-    background-color: #e8894a !important;
-    color: white !important;
-}
-/* Esconde rodapé Streamlit */
-footer {visibility: hidden;}
-#MainMenu {visibility: hidden;}
-</style>
-"""
-
 
 def _get_users() -> dict[str, str]:
-    """Retorna {username: password} do secrets.toml."""
     try:
         if "users" in st.secrets:
             return dict(st.secrets["users"])
@@ -47,7 +24,6 @@ def is_authenticated() -> bool:
 
 
 def show_login() -> None:
-    """Renderiza a tela de login. Faz st.stop() se não autenticado."""
     if is_authenticated():
         return
 
@@ -57,8 +33,16 @@ def show_login() -> None:
         layout="centered",
     )
 
-    # CSS global — deve vir antes dos widgets
-    st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
+    st.markdown("""
+        <style>
+        footer {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        [data-testid="stForm"] {
+            border: none !important;
+            padding: 0 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
 
@@ -74,10 +58,16 @@ def show_login() -> None:
             unsafe_allow_html=True,
         )
 
-        username = st.text_input("Usuário", placeholder="seu usuário")
-        password = st.text_input("Senha", type="password", placeholder="••••••••")
+        with st.form("login_form"):
+            username = st.text_input("Usuário", placeholder="seu usuário")
+            password = st.text_input("Senha", type="password", placeholder="••••••••")
+            submitted = st.form_submit_button(
+                "Entrar",
+                use_container_width=True,
+                type="primary",
+            )
 
-        if st.button("Entrar", use_container_width=True):
+        if submitted:
             users = _get_users()
             if username in users and users[username] == password:
                 st.session_state.authenticated = True
@@ -90,7 +80,6 @@ def show_login() -> None:
 
 
 def show_logout_button() -> None:
-    """Botão de logout no sidebar."""
     with st.sidebar:
         st.markdown("---")
         user = st.session_state.get("username", "")
