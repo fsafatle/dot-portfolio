@@ -13,6 +13,8 @@ _CSS = """
 <style>
 footer {visibility: hidden;}
 #MainMenu {visibility: hidden;}
+/* debug: forca texto do botao preto para ser visivel */
+button { color: #000000 !important; }
 </style>
 """
 
