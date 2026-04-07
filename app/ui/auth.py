@@ -42,7 +42,7 @@ def show_login() -> None:
     with col2:
         st.markdown(
             "<h1 style='text-align:center;font-size:2.4rem;letter-spacing:-1px'>"
-            "⬤ DOT</h1>"
+            "DOT</h1>"
             "<p style='text-align:center;color:#929292;margin-top:-8px;margin-bottom:32px'>"
             "Portfolio Management</p>",
             unsafe_allow_html=True,
