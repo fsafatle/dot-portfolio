@@ -66,6 +66,13 @@ INITIAL_PORTFOLIO = [
 
 # ── Multi-portfolio registry ─────────────────────────────────────────────────
 PORTFOLIOS: dict[str, dict] = {
+    "dot": {
+        "key":      "dot",
+        "name":     "DOT Portfolio",
+        "flag":     "⬤",
+        "w_global": 0.50,   # peso do Global Portfolio (USD)
+        "w_brazil": 0.50,   # peso do Brazil Portfolio (BRL→USD)
+    },
     "global": {
         "key":        "global",
         "name":       "Global Portfolio",

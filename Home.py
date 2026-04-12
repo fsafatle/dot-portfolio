@@ -18,6 +18,9 @@ show_logout_button()
 
 pg = st.navigation(
     {
+        "⬤ DOT Portfolio": [
+            st.Page("pages/dot_home.py", title="Home"),
+        ],
         "🌍 Global Portfolio": [
             st.Page("pages/global_home.py",        title="Home"),
             st.Page("pages/global_allocations.py", title="Allocations"),
