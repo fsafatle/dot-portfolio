@@ -12,7 +12,6 @@ from app.portfolio.combined import (
     compute_brazil_usd_norm,
     _returns_from_series,
 )
-from app.ui.auth import show_login, show_logout_button
 from app.ui.styles import inject_dot_css
 from app.config import PORTFOLIOS
 
@@ -47,9 +46,6 @@ def _load_dot(cutoff_str: str = "") -> dict:
 
 
 def render_dot_dashboard() -> None:
-    show_login()
-    show_logout_button()
-
     st.set_page_config(
         page_title="DOT Portfolio · DOT",
         page_icon="⬤",
