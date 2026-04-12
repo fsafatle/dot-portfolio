@@ -1,7 +1,6 @@
 """Dashboard do DOT Portfolio combinado (Global USD + Brazil BRL→USD)."""
 
 from datetime import date
-from typing import Optional
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -22,10 +21,10 @@ _LIGHT    = "#D5D5D5"
 _BLUE     = "#3b82f6"
 _GREEN    = "#10b981"
 
-# Pesos configuráveis — vêm do config
+# Pesos padrão — vêm do config
 _CFG = PORTFOLIOS.get("dot", {})
-_W_BRAZIL = _CFG.get("w_brazil", 0.50)
-_W_GLOBAL = _CFG.get("w_global", 0.50)
+_W_BRAZIL_DEFAULT = int(_CFG.get("w_brazil", 0.50) * 100)
+_W_GLOBAL_DEFAULT = int(_CFG.get("w_global", 0.50) * 100)
 
 
 def _fmt_pct(v, decimals=2):
@@ -55,27 +54,15 @@ def render_dot_dashboard() -> None:
 
     # ── Header ────────────────────────────────────────────────────────────────
     st.markdown(
-        f"<h1>⬤ DOT Portfolio<span class='dot-mark'></span></h1>"
-        f"<p style='color:#ABABAB;font-size:0.8rem;margin-top:-8px;'>"
-        f"Global + Brazil · Performance combinada em USD</p>",
+        "<h1>⬤ DOT Portfolio<span class='dot-mark'></span></h1>"
+        "<p style='color:#ABABAB;font-size:0.8rem;margin-top:-8px;'>"
+        "Global + Brazil · Performance combinada em USD</p>",
         unsafe_allow_html=True,
     )
 
-    # ── Sidebar: pesos + data de corte ───────────────────────────────────────
+    # ── Sidebar: apenas data de corte ────────────────────────────────────────
     brazil_start = PORTFOLIOS["brazil"]["start_date"]
     with st.sidebar:
-        st.markdown("---")
-        st.markdown(
-            "<div style='font-size:0.8rem;color:#ABABAB;margin-bottom:6px'>Composição do DOT</div>",
-            unsafe_allow_html=True,
-        )
-        w_global_pct = st.slider(
-            "Global Portfolio (%)", min_value=0, max_value=100,
-            value=int(_W_GLOBAL * 100), step=5, key="dot_w_global",
-        )
-        w_brazil_pct = 100 - w_global_pct
-        st.caption(f"🇧🇷 Brazil Portfolio: {w_brazil_pct}%")
-
         st.markdown("---")
         st.markdown(
             "<div style='font-size:0.8rem;color:#ABABAB;margin-bottom:4px'>Visualizar até</div>",
@@ -93,10 +80,32 @@ def render_dot_dashboard() -> None:
         if cutoff_val:
             st.caption(f"📅 Até {cutoff_val.strftime('%d/%m/%Y')}")
 
+    st.divider()
+
+    # ── KPIs + slider de composição ──────────────────────────────────────────
+    kpi_cols = st.columns([1, 1, 1, 1, 0.05, 1.4])
+
+    # Os pesos precisam ser lidos ANTES de carregar dados
+    with kpi_cols[5]:
+        st.markdown(
+            "<div style='font-size:0.75rem;color:#929292;margin-bottom:2px'>Composição</div>",
+            unsafe_allow_html=True,
+        )
+        w_global_pct = st.slider(
+            "Global (%)", min_value=0, max_value=100,
+            value=_W_GLOBAL_DEFAULT, step=5, key="dot_w_global",
+            label_visibility="collapsed",
+        )
+        w_brazil_pct = 100 - w_global_pct
+        st.markdown(
+            f"<div style='font-size:0.8rem;color:#5E5E5E;margin-top:2px'>"
+            f"🌍 Global: <b>{w_global_pct}%</b> &nbsp;|&nbsp; "
+            f"🇧🇷 Brazil: <b>{w_brazil_pct}%</b></div>",
+            unsafe_allow_html=True,
+        )
+
     w_global = w_global_pct / 100.0
     w_brazil = w_brazil_pct / 100.0
-
-    st.divider()
 
     # ── Carrega dados ─────────────────────────────────────────────────────────
     data  = _load_dot(cutoff_str, w_global, w_brazil)
@@ -110,15 +119,13 @@ def render_dot_dashboard() -> None:
     if last_date:
         st.caption(f"Dados até {last_date.strftime('%d/%m/%Y')}")
 
-    # ── KPIs ──────────────────────────────────────────────────────────────────
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
+    with kpi_cols[0]:
         st.metric("Daily Return", _fmt_pct(stats["daily"]))
-    with c2:
+    with kpi_cols[1]:
         st.metric("MTD", _fmt_pct(stats["mtd"]))
-    with c3:
+    with kpi_cols[2]:
         st.metric("YTD", _fmt_pct(stats["ytd"]))
-    with c4:
+    with kpi_cols[3]:
         tot = stats["total"]
         st.markdown(
             f"<div style='background:#F9F9F9;border-radius:8px;padding:12px 14px 10px;"
@@ -135,28 +142,23 @@ def render_dot_dashboard() -> None:
     # ── Gráfico ───────────────────────────────────────────────────────────────
     st.subheader("DOT Portfolio vs Global vs Brazil (USD, base = 1)")
 
-    dot_s    = data["dot"]
-    g_norm   = data["global_norm"]
-    b_norm   = data["brazil_norm"]
+    dot_s  = data["dot"]
+    g_norm = data["global_norm"]
+    b_norm = data["brazil_norm"]
 
     fig = go.Figure()
 
-    # DOT combined
     fig.add_trace(go.Scatter(
         x=list(dot_s.index), y=dot_s.values,
         mode="lines", name="DOT Portfolio",
         line=dict(color=_ACCENT, width=2.5),
     ))
-
-    # Global (USD)
     if not g_norm.empty:
         fig.add_trace(go.Scatter(
             x=list(g_norm.index), y=g_norm.values,
             mode="lines", name="Global Portfolio (USD)",
             line=dict(color=_BLUE, width=1.6, dash="dash"),
         ))
-
-    # Brazil (USD)
     if not b_norm.empty:
         fig.add_trace(go.Scatter(
             x=list(b_norm.index), y=b_norm.values,
@@ -167,34 +169,25 @@ def render_dot_dashboard() -> None:
     fig.update_layout(
         height=380,
         margin=dict(l=0, r=0, t=10, b=0),
-        yaxis_title="",
-        xaxis_title="",
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Segoe UI, system-ui, sans-serif", color=_GRAY, size=12),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02,
-            xanchor="left", x=0,
-            font=dict(size=12, color=_GRAY),
+            xanchor="left", x=0, font=dict(size=12, color=_GRAY),
         ),
         hovermode="x unified",
-        xaxis=dict(
-            showgrid=False,
-            showline=True, linecolor=_LIGHT, linewidth=1,
-            tickfont=dict(color=_GRAY, size=11),
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor="#F0F0F0", gridwidth=1,
-            showline=False,
-            tickfont=dict(color=_GRAY, size=11),
-            tickformat=".3f",
-        ),
+        xaxis=dict(showgrid=False, showline=True, linecolor=_LIGHT,
+                   linewidth=1, tickfont=dict(color=_GRAY, size=11)),
+        yaxis=dict(showgrid=True, gridcolor="#F0F0F0", gridwidth=1,
+                   showline=False, tickfont=dict(color=_GRAY, size=11),
+                   tickformat=".3f"),
     )
     st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
 
-    # ── Resumo da composição ──────────────────────────────────────────────────
+    # ── Cards de composição ───────────────────────────────────────────────────
     st.subheader("Composição")
     ca, cb = st.columns(2)
 
@@ -207,7 +200,7 @@ def render_dot_dashboard() -> None:
             f"border:1px solid #EFEFEF'>"
             f"<div style='font-size:0.8rem;color:#929292'>🌍 Global Portfolio</div>"
             f"<div style='font-size:1.1rem;font-weight:700;color:#1E1E1E;margin-top:4px'>"
-            f"{int(w_global*100)}% do DOT</div>"
+            f"{w_global_pct}% do DOT</div>"
             f"<div style='font-size:0.85rem;color:#5E5E5E;margin-top:2px'>"
             f"Since inception (USD): {_fmt_pct(g_total)}</div>"
             f"</div>",
@@ -219,7 +212,7 @@ def render_dot_dashboard() -> None:
             f"border:1px solid #EFEFEF'>"
             f"<div style='font-size:0.8rem;color:#929292'>🇧🇷 Brazil Portfolio</div>"
             f"<div style='font-size:1.1rem;font-weight:700;color:#1E1E1E;margin-top:4px'>"
-            f"{int(w_brazil*100)}% do DOT</div>"
+            f"{w_brazil_pct}% do DOT</div>"
             f"<div style='font-size:0.85rem;color:#5E5E5E;margin-top:2px'>"
             f"Since inception (USD): {_fmt_pct(b_total)}</div>"
             f"</div>",
