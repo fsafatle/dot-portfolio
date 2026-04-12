@@ -9,6 +9,7 @@ from app.portfolio.combined import (
     compute_dot_series,
     compute_global_usd_norm,
     compute_brazil_usd_norm,
+    compute_blended_benchmark,
     _returns_from_series,
 )
 from app.ui.styles import inject_dot_css
@@ -34,14 +35,20 @@ def _fmt_pct(v, decimals=2):
     return f"{sign}{v * 100:.{decimals}f}%"
 
 
+_BENCH_MULTIPLIER = _CFG.get("bench_multiplier", 1.5)
+_BENCH_LABEL      = _CFG.get("bench_label", f"{_CFG.get('bench_multiplier', 1.5)}× CPI+IPCA (USD)")
+
+
 @st.cache_data(ttl=300)
 def _load_dot(cutoff_str: str = "", w_global: float = 0.5, w_brazil: float = 0.5) -> dict:
     cutoff = date.fromisoformat(cutoff_str) if cutoff_str else None
     dot    = compute_dot_series(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global)
     g_norm = compute_global_usd_norm(cutoff=cutoff)
     b_norm = compute_brazil_usd_norm(cutoff=cutoff)
+    bench  = compute_blended_benchmark(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global,
+                                       multiplier=_BENCH_MULTIPLIER)
     stats  = _returns_from_series(dot)
-    return dict(dot=dot, global_norm=g_norm, brazil_norm=b_norm, stats=stats)
+    return dict(dot=dot, global_norm=g_norm, brazil_norm=b_norm, bench=bench, stats=stats)
 
 
 def render_dot_dashboard() -> None:
@@ -126,13 +133,26 @@ def render_dot_dashboard() -> None:
     with kpi_cols[2]:
         st.metric("YTD", _fmt_pct(stats["ytd"]))
     with kpi_cols[3]:
-        tot = stats["total"]
+        tot   = stats["total"]
+        bench = data["bench"]
+        _bench_line = ""
+        if tot is not None and not bench.empty:
+            _bret = bench.iloc[-1] - 1.0
+            _d    = tot - _bret
+            _s    = "+" if _d >= 0 else ""
+            _col  = "#10b981" if _d >= 0 else "#ef4444"
+            _bench_line = (
+                f"<div style='margin-top:6px;font-size:0.72rem;line-height:1.5'>"
+                f"<span style='color:{_col};font-weight:600'>{_s}{_d*100:.2f}pp</span>"
+                f"<span style='color:#ABABAB'> vs {_BENCH_LABEL}</span></div>"
+            )
         st.markdown(
             f"<div style='background:#F9F9F9;border-radius:8px;padding:12px 14px 10px;"
             f"border:1px solid #EFEFEF'>"
             f"<div style='font-size:0.8rem;color:#929292;margin-bottom:2px'>Since Inception</div>"
             f"<div style='font-size:1.6rem;font-weight:700;color:#1E1E1E;line-height:1.2'>"
             f"{_fmt_pct(tot)}</div>"
+            f"{_bench_line}"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -164,6 +184,14 @@ def render_dot_dashboard() -> None:
             x=list(b_norm.index), y=b_norm.values,
             mode="lines", name="Brazil Portfolio (USD)",
             line=dict(color=_GREEN, width=1.6, dash="dot"),
+        ))
+
+    bench = data["bench"]
+    if not bench.empty:
+        fig.add_trace(go.Scatter(
+            x=list(bench.index), y=bench.values,
+            mode="lines", name=_BENCH_LABEL,
+            line=dict(color="#f59e0b", width=1.5, dash="dash"),
         ))
 
     fig.update_layout(

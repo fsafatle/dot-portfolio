@@ -47,33 +47,46 @@ def _load_data(portfolio_key: str, cutoff_str: str = "") -> dict:
         db.close()
 
 
+def _apply_multiplier(series: "pd.Series", multiplier: float) -> "pd.Series":
+    """Aplica multiplicador aos retornos diários e reacumula (base = 1.0)."""
+    if multiplier == 1.0 or series.empty:
+        return series
+    import pandas as _pd
+    daily = series.pct_change().fillna(0.0)
+    result = (1.0 + daily * multiplier).cumprod()
+    return result / result.iloc[0]
+
+
 @st.cache_data(ttl=3600)
-def _load_cpi(start_str: str, end_str: str = "") -> dict:
+def _load_cpi(start_str: str, end_str: str = "", multiplier: float = 1.0) -> dict:
     start = date.fromisoformat(start_str)
     end   = date.fromisoformat(end_str) if end_str else date.today()
     series = fetch_cpi_daily(start, end)
     if series.empty:
         return {}
+    series = _apply_multiplier(series, multiplier)
     return {str(k): v for k, v in series.items()}
 
 
 @st.cache_data(ttl=3600)
-def _load_cdi(start_str: str, end_str: str = "") -> dict:
+def _load_cdi(start_str: str, end_str: str = "", multiplier: float = 1.0) -> dict:
     start = date.fromisoformat(start_str)
     end   = date.fromisoformat(end_str) if end_str else date.today()
     series = fetch_cdi_daily(start, end)
     if series.empty:
         return {}
+    series = _apply_multiplier(series, multiplier)
     return {str(k): v for k, v in series.items()}
 
 
 @st.cache_data(ttl=3600)
-def _load_ipca(start_str: str, end_str: str = "") -> dict:
+def _load_ipca(start_str: str, end_str: str = "", multiplier: float = 1.0) -> dict:
     start = date.fromisoformat(start_str)
     end   = date.fromisoformat(end_str) if end_str else date.today()
     series = fetch_ipca_daily(start, end)
     if series.empty:
         return {}
+    series = _apply_multiplier(series, multiplier)
     return {str(k): v for k, v in series.items()}
 
 
@@ -153,16 +166,20 @@ BUCKET_COLORS = {
 def render_dashboard(portfolio_cfg: dict) -> None:
     """Render the full portfolio dashboard for a given portfolio config."""
 
-    key        = portfolio_cfg["key"]
-    start_date = portfolio_cfg["start_date"]
-    buckets    = portfolio_cfg["buckets"]
-    show_cpi   = portfolio_cfg.get("show_cpi", False)
-    show_cdi   = portfolio_cfg.get("show_cdi", False)
-    show_ipca  = portfolio_cfg.get("show_ipca", False)
-    currency   = portfolio_cfg.get("currency", "USD")
-    cpi_label  = portfolio_cfg.get("cpi_label", "CPI")
-    cdi_label  = portfolio_cfg.get("cdi_label", "CDI acumulado")
-    ipca_label = portfolio_cfg.get("ipca_label", "IPCA acumulado")
+    key              = portfolio_cfg["key"]
+    start_date       = portfolio_cfg["start_date"]
+    buckets          = portfolio_cfg["buckets"]
+    show_cpi         = portfolio_cfg.get("show_cpi", False)
+    show_cdi         = portfolio_cfg.get("show_cdi", False)
+    show_ipca        = portfolio_cfg.get("show_ipca", False)
+    currency         = portfolio_cfg.get("currency", "USD")
+    cpi_label        = portfolio_cfg.get("cpi_label", "CPI")
+    cdi_label        = portfolio_cfg.get("cdi_label", "CDI acumulado")
+    ipca_label       = portfolio_cfg.get("ipca_label", "IPCA acumulado")
+    cpi_multiplier   = portfolio_cfg.get("cpi_multiplier", 1.0)
+    ipca_multiplier  = portfolio_cfg.get("ipca_multiplier", 1.0)
+    cpi_mult_label   = portfolio_cfg.get("cpi_mult_label",  f"{cpi_multiplier}× CPI")
+    ipca_mult_label  = portfolio_cfg.get("ipca_mult_label", f"{ipca_multiplier}× IPCA")
 
     st.set_page_config(
         page_title=f"{portfolio_cfg['name']} · DOT",
@@ -263,37 +280,39 @@ def render_dashboard(portfolio_cfg: dict) -> None:
     with c5:
         tot = data["tot_ret"]
         _bmark_lines = []
+        def _kpi_bmark_line(raw: dict, label: str) -> str:
+            if not raw or tot is None:
+                return ""
+            _bret = list(raw.values())[-1] - 1.0
+            _d    = tot - _bret
+            _s    = "+" if _d >= 0 else ""
+            _col  = "#10b981" if _d >= 0 else "#ef4444"
+            return (
+                f"<span style='color:{_col};font-weight:600'>{_s}{_d*100:.2f}pp</span>"
+                f"<span style='color:#ABABAB'> vs {label}</span>"
+            )
+
         if tot is not None:
             if show_cdi:
                 _raw = _load_cdi(start_date, cutoff_str)
-                if _raw:
-                    _bret = list(_raw.values())[-1] - 1.0
-                    _d = tot - _bret
-                    _s, _col = ("+" if _d >= 0 else ""), ("#10b981" if _d >= 0 else "#ef4444")
-                    _bmark_lines.append(
-                        f"<span style='color:{_col};font-weight:600'>{_s}{_d*100:.2f}pp</span>"
-                        f"<span style='color:#ABABAB'> vs {cdi_label}</span>"
-                    )
+                ln = _kpi_bmark_line(_raw, cdi_label)
+                if ln: _bmark_lines.append(ln)
             if show_ipca:
                 _raw = _load_ipca(start_date, cutoff_str)
-                if _raw:
-                    _bret = list(_raw.values())[-1] - 1.0
-                    _d = tot - _bret
-                    _s, _col = ("+" if _d >= 0 else ""), ("#10b981" if _d >= 0 else "#ef4444")
-                    _bmark_lines.append(
-                        f"<span style='color:{_col};font-weight:600'>{_s}{_d*100:.2f}pp</span>"
-                        f"<span style='color:#ABABAB'> vs {ipca_label}</span>"
-                    )
+                ln = _kpi_bmark_line(_raw, ipca_label)
+                if ln: _bmark_lines.append(ln)
+                if ipca_multiplier != 1.0:
+                    _raw_m = _load_ipca(start_date, cutoff_str, ipca_multiplier)
+                    ln = _kpi_bmark_line(_raw_m, ipca_mult_label)
+                    if ln: _bmark_lines.append(ln)
             if show_cpi:
                 _raw = _load_cpi(start_date, cutoff_str)
-                if _raw:
-                    _bret = list(_raw.values())[-1] - 1.0
-                    _d = tot - _bret
-                    _s, _col = ("+" if _d >= 0 else ""), ("#10b981" if _d >= 0 else "#ef4444")
-                    _bmark_lines.append(
-                        f"<span style='color:{_col};font-weight:600'>{_s}{_d*100:.2f}pp</span>"
-                        f"<span style='color:#ABABAB'> vs {cpi_label}</span>"
-                    )
+                ln = _kpi_bmark_line(_raw, cpi_label)
+                if ln: _bmark_lines.append(ln)
+                if cpi_multiplier != 1.0:
+                    _raw_m = _load_cpi(start_date, cutoff_str, cpi_multiplier)
+                    ln = _kpi_bmark_line(_raw_m, cpi_mult_label)
+                    if ln: _bmark_lines.append(ln)
 
         _bmarks_html = (
             "<div style='margin-top:6px;display:flex;flex-direction:column;gap:2px'>"
@@ -344,44 +363,37 @@ def render_dashboard(portfolio_cfg: dict) -> None:
 
         trading_dates = set(snap_df["Date"].astype(str))
 
+        def _add_bench_trace(raw: dict, name: str, color: str, dash: str, align_to_trading=False):
+            if not raw:
+                return
+            s = pd.Series(raw)
+            s.index = pd.to_datetime(list(raw.keys())).date
+            if align_to_trading:
+                s = s[[d for d in s.index if str(d) in trading_dates]]
+            if not s.empty:
+                fig.add_trace(go.Scatter(
+                    x=list(s.index), y=s.values,
+                    mode="lines", name=name,
+                    line=dict(color=color, width=1.6, dash=dash),
+                ))
+
         if show_cpi:
-            cpi_raw = _load_cpi(start_date, cutoff_str)
-            if cpi_raw:
-                cpi_series = pd.Series(cpi_raw)
-                cpi_series.index = pd.to_datetime(list(cpi_raw.keys())).date
-                cpi_aligned = cpi_series[
-                    [d for d in cpi_series.index if str(d) in trading_dates]
-                ]
-                if not cpi_aligned.empty:
-                    fig.add_trace(go.Scatter(
-                        x=list(cpi_aligned.index), y=cpi_aligned.values,
-                        mode="lines", name=cpi_label,
-                        line=dict(color=_GRAY, width=1.6, dash="dot"),
-                    ))
+            _add_bench_trace(_load_cpi(start_date, cutoff_str),
+                             cpi_label, _GRAY, "dot", align_to_trading=True)
+            if cpi_multiplier != 1.0:
+                _add_bench_trace(_load_cpi(start_date, cutoff_str, cpi_multiplier),
+                                 cpi_mult_label, "#f59e0b", "dash", align_to_trading=True)
 
         if show_cdi:
-            cdi_raw = _load_cdi(start_date, cutoff_str)
-            if cdi_raw:
-                cdi_series = pd.Series(cdi_raw)
-                cdi_series.index = pd.to_datetime(list(cdi_raw.keys())).date
-                if not cdi_series.empty:
-                    fig.add_trace(go.Scatter(
-                        x=list(cdi_series.index), y=cdi_series.values,
-                        mode="lines", name=cdi_label,
-                        line=dict(color=_CHARCOAL, width=1.6, dash="dash"),
-                    ))
+            _add_bench_trace(_load_cdi(start_date, cutoff_str),
+                             cdi_label, _CHARCOAL, "dash")
 
         if show_ipca:
-            ipca_raw = _load_ipca(start_date, cutoff_str)
-            if ipca_raw:
-                ipca_series = pd.Series(ipca_raw)
-                ipca_series.index = pd.to_datetime(list(ipca_raw.keys())).date
-                if not ipca_series.empty:
-                    fig.add_trace(go.Scatter(
-                        x=list(ipca_series.index), y=ipca_series.values,
-                        mode="lines", name=ipca_label,
-                        line=dict(color="#6366f1", width=1.6, dash="dot"),
-                    ))
+            _add_bench_trace(_load_ipca(start_date, cutoff_str),
+                             ipca_label, "#6366f1", "dot")
+            if ipca_multiplier != 1.0:
+                _add_bench_trace(_load_ipca(start_date, cutoff_str, ipca_multiplier),
+                                 ipca_mult_label, "#ec4899", "dash")
 
         fig.update_layout(
             height=360,

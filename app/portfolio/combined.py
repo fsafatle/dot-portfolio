@@ -21,6 +21,8 @@ import pandas as pd
 from app.database import get_db_for
 from app.portfolio.performance import snapshot_series
 from app.market_data.fx_provider import fetch_usdbrl
+from app.market_data.cpi_provider import fetch_cpi_daily
+from app.market_data.ipca_provider import fetch_ipca_daily
 
 
 def _common_start(global_snap: pd.Series, brazil_snap: pd.Series) -> date:
@@ -175,3 +177,74 @@ def _returns_from_series(s: pd.Series) -> dict:
     total = (last_val / first_val) - 1.0
 
     return dict(daily=daily, mtd=mtd, ytd=ytd, total=total, last_date=last_date)
+
+
+def _apply_multiplier(series: pd.Series, multiplier: float) -> pd.Series:
+    if multiplier == 1.0 or series.empty:
+        return series
+    daily  = series.pct_change().fillna(0.0)
+    result = (1.0 + daily * multiplier).cumprod()
+    return result / result.iloc[0]
+
+
+def compute_blended_benchmark(
+    cutoff: Optional[date] = None,
+    w_brazil: float = 0.5,
+    w_global: float = 0.5,
+    multiplier: float = 1.5,
+) -> pd.Series:
+    """
+    Benchmark combinado para o DOT Portfolio (base = 1.0 na data inicial comum).
+
+    - Componente Global: multiplier × CPI (USD)
+    - Componente Brazil: multiplier × IPCA (BRL → USD via FX)
+    - Blendado pelos mesmos pesos do portfolio DOT.
+    """
+    global_snap, brazil_snap = _get_snaps(cutoff)
+    if global_snap.empty or brazil_snap.empty:
+        return pd.Series(dtype=float)
+
+    t0    = _common_start(global_snap, brazil_snap)
+    t_end = cutoff or date.today()
+
+    # CPI (USD) com multiplicador
+    cpi_raw = fetch_cpi_daily(t0, t_end)
+    if cpi_raw.empty:
+        return pd.Series(dtype=float)
+    cpi = _apply_multiplier(cpi_raw, multiplier)
+
+    # IPCA (BRL) com multiplicador
+    ipca_raw = fetch_ipca_daily(t0, t_end)
+    if ipca_raw.empty:
+        return pd.Series(dtype=float)
+    ipca = _apply_multiplier(ipca_raw, multiplier)
+
+    # FX para converter IPCA BRL → USD
+    fx = fetch_usdbrl(t0, t_end)
+    if fx.empty:
+        return pd.Series(dtype=float)
+
+    all_dates = sorted(set(cpi.index) | set(ipca.index) | set(fx.index))
+    all_dates  = [d for d in all_dates if t0 <= d <= t_end]
+
+    df = pd.DataFrame(index=all_dates)
+    df["cpi"]  = cpi.reindex(all_dates)
+    df["ipca"] = ipca.reindex(all_dates)
+    df["fx"]   = fx.reindex(all_dates)
+    df = df.ffill().bfill().dropna()
+
+    if len(df) < 2:
+        return pd.Series(dtype=float)
+
+    df["fx_norm"]   = df["fx"]   / df["fx"].iloc[0]
+    df["ipca_usd"]  = df["ipca"] / df["fx_norm"]   # IPCA convertido para USD
+
+    df["r_cpi"]  = df["cpi"].pct_change().fillna(0.0)
+    df["r_ipca"] = df["ipca_usd"].pct_change().fillna(0.0)
+    df["r_bench"] = w_global * df["r_cpi"] + w_brazil * df["r_ipca"]
+
+    vals = [1.0]
+    for r in df["r_bench"].iloc[1:]:
+        vals.append(vals[-1] * (1.0 + r))
+
+    return pd.Series(vals, index=df.index)

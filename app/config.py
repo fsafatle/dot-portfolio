@@ -67,11 +67,13 @@ INITIAL_PORTFOLIO = [
 # ── Multi-portfolio registry ─────────────────────────────────────────────────
 PORTFOLIOS: dict[str, dict] = {
     "dot": {
-        "key":      "dot",
-        "name":     "DOT Portfolio",
-        "flag":     "⬤",
-        "w_global": 0.50,   # peso do Global Portfolio (USD)
-        "w_brazil": 0.50,   # peso do Brazil Portfolio (BRL→USD)
+        "key":              "dot",
+        "name":             "DOT Portfolio",
+        "flag":             "⬤",
+        "w_global":         0.50,   # peso do Global Portfolio (USD)
+        "w_brazil":         0.50,   # peso do Brazil Portfolio (BRL→USD)
+        "bench_multiplier": 1.5,    # multiplicador dos benchmarks CPI+IPCA
+        "bench_label":      "1.5× CPI+IPCA (USD)",
     },
     "global": {
         "key":        "global",
@@ -82,8 +84,10 @@ PORTFOLIOS: dict[str, dict] = {
         "base_value": 1.0,
         "currency":   "USD",
         "buckets":    ["Yield", "Growth", "Reserva de Valor", "Liquidez"],
-        "show_cpi":   True,
-        "cpi_label":  "CPI EUA (acumulado)",
+        "show_cpi":        True,
+        "cpi_label":       "CPI EUA (acumulado)",
+        "cpi_multiplier":  1.5,
+        "cpi_mult_label":  "1.5× CPI EUA",
         "initial_portfolio": INITIAL_PORTFOLIO,
     },
     "brazil": {
@@ -98,8 +102,10 @@ PORTFOLIOS: dict[str, dict] = {
         "show_cpi":   False,
         "show_cdi":   True,
         "cdi_label":  "CDI acumulado",
-        "show_ipca":  True,
-        "ipca_label": "IPCA acumulado",
+        "show_ipca":        True,
+        "ipca_label":       "IPCA acumulado",
+        "ipca_multiplier":  1.5,
+        "ipca_mult_label":  "1.5× IPCA",
         "initial_portfolio": [
             {
                 "name":        "IMA-B ETF",
