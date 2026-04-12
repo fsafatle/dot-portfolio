@@ -10,45 +10,58 @@ from app.models import Asset, Allocation, PortfolioSnapshot, Price
 from app.portfolio.engine import get_active_allocations, get_prices_df, get_actual_weights
 
 
-def snapshot_series(db: Session) -> pd.Series:
+def snapshot_series(db: Session, cutoff: Optional[date] = None) -> pd.Series:
     """Return portfolio index as a Series[date → float]."""
-    rows = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date).all()
+    q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date)
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    rows = q.all()
     if not rows:
         return pd.Series(dtype=float)
     return pd.Series({r.date: r.index_value for r in rows})
 
 
-def daily_return_series(db: Session) -> pd.Series:
+def daily_return_series(db: Session, cutoff: Optional[date] = None) -> pd.Series:
     """Return daily returns as a Series[date → float]."""
-    rows = (
+    q = (
         db.query(PortfolioSnapshot)
         .filter(PortfolioSnapshot.daily_return.isnot(None))
         .order_by(PortfolioSnapshot.date)
-        .all()
     )
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    rows = q.all()
     return pd.Series({r.date: r.daily_return for r in rows})
 
 
-def total_return(db: Session) -> Optional[float]:
+def total_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
     """Total return since inception (decimal)."""
-    rows = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date).all()
+    q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date)
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    rows = q.all()
     if len(rows) < 2:
         return None
     return (rows[-1].index_value / rows[0].index_value) - 1.0
 
 
-def latest_daily_return(db: Session) -> Optional[float]:
-    row = (
+def latest_daily_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
+    q = (
         db.query(PortfolioSnapshot)
         .filter(PortfolioSnapshot.daily_return.isnot(None))
         .order_by(PortfolioSnapshot.date.desc())
-        .first()
     )
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    row = q.first()
     return row.daily_return if row else None
 
 
-def latest_index_value(db: Session) -> Optional[float]:
-    row = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc()).first()
+def latest_index_value(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
+    q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc())
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    row = q.first()
     return row.index_value if row else None
 
 
@@ -64,7 +77,7 @@ def _nearest_price_after(col: pd.Series, target: date) -> Optional[float]:
     return float(candidates.iloc[0]) if not candidates.empty else None
 
 
-def asset_performance(db: Session) -> pd.DataFrame:
+def asset_performance(db: Session, cutoff: Optional[date] = None) -> pd.DataFrame:
     """
     Return a DataFrame with per-asset performance stats.
 
@@ -81,8 +94,11 @@ def asset_performance(db: Session) -> pd.DataFrame:
         return pd.DataFrame()
 
     start = first_snap.date
-    end_row = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc()).first()
-    end = end_row.date if end_row else date.today()
+    end_q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc())
+    if cutoff:
+        end_q = end_q.filter(PortfolioSnapshot.date <= cutoff)
+    end_row = end_q.first()
+    end = end_row.date if end_row else (cutoff or date.today())
 
     fetch_from = min(start, end - timedelta(days=366))
 
@@ -122,12 +138,10 @@ def asset_performance(db: Session) -> pd.DataFrame:
         )
         port_v2 = db.query(_PortV2).first()
         if port_v2 is not None:
-            day = (
-                db.query(_DaySnap)
-                  .filter_by(portfolio_id=port_v2.id)
-                  .order_by(_DaySnap.date.desc())
-                  .first()
-            )
+            day_q = db.query(_DaySnap).filter_by(portfolio_id=port_v2.id)
+            if cutoff:
+                day_q = day_q.filter(_DaySnap.date <= cutoff)
+            day = day_q.order_by(_DaySnap.date.desc()).first()
             if day:
                 snaps = (
                     db.query(_AsSnap)
@@ -286,22 +300,24 @@ def asset_performance(db: Session) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def mtd_return(db: Session) -> Optional[float]:
-    today = date.today()
+def mtd_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
+    today = cutoff or date.today()
     month_start = today.replace(day=1)
-    rows = (
+    q = (
         db.query(PortfolioSnapshot)
         .filter(PortfolioSnapshot.date >= month_start)
         .order_by(PortfolioSnapshot.date)
-        .all()
     )
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    rows = q.all()
     if len(rows) < 2:
         return None
     return (rows[-1].index_value / rows[0].index_value) - 1.0
 
 
-def ytd_return(db: Session) -> Optional[float]:
-    today = date.today()
+def ytd_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
+    today = cutoff or date.today()
     # Derive inception from the first snapshot in this portfolio's DB
     first_snap = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date).first()
     if first_snap is None:
@@ -313,12 +329,14 @@ def ytd_return(db: Session) -> Optional[float]:
         if portfolio_inception >= calendar_year_start - timedelta(days=93)
         else calendar_year_start
     )
-    rows = (
+    q = (
         db.query(PortfolioSnapshot)
         .filter(PortfolioSnapshot.date >= ytd_ref)
         .order_by(PortfolioSnapshot.date)
-        .all()
     )
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    rows = q.all()
     if len(rows) < 2:
         return None
     return (rows[-1].index_value / rows[0].index_value) - 1.0

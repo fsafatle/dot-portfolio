@@ -29,45 +29,49 @@ def _fmt_pct(v, decimals=2):
 
 
 @st.cache_data(ttl=300)
-def _load_data(portfolio_key: str) -> dict:
+def _load_data(portfolio_key: str, cutoff_str: str = "") -> dict:
+    cutoff = date.fromisoformat(cutoff_str) if cutoff_str else None
     db = get_db_for(portfolio_key)
     try:
         return dict(
-            snap=performance.snapshot_series(db),
-            daily=performance.daily_return_series(db),
-            latest_idx=performance.latest_index_value(db),
-            latest_day=performance.latest_daily_return(db),
-            tot_ret=performance.total_return(db),
-            mtd=performance.mtd_return(db),
-            ytd=performance.ytd_return(db),
-            asset_perf=performance.asset_performance(db),
+            snap=performance.snapshot_series(db, cutoff=cutoff),
+            daily=performance.daily_return_series(db, cutoff=cutoff),
+            latest_idx=performance.latest_index_value(db, cutoff=cutoff),
+            latest_day=performance.latest_daily_return(db, cutoff=cutoff),
+            tot_ret=performance.total_return(db, cutoff=cutoff),
+            mtd=performance.mtd_return(db, cutoff=cutoff),
+            ytd=performance.ytd_return(db, cutoff=cutoff),
+            asset_perf=performance.asset_performance(db, cutoff=cutoff),
         )
     finally:
         db.close()
 
 
 @st.cache_data(ttl=3600)
-def _load_cpi(start_str: str) -> dict:
+def _load_cpi(start_str: str, end_str: str = "") -> dict:
     start = date.fromisoformat(start_str)
-    series = fetch_cpi_daily(start, date.today())
+    end   = date.fromisoformat(end_str) if end_str else date.today()
+    series = fetch_cpi_daily(start, end)
     if series.empty:
         return {}
     return {str(k): v for k, v in series.items()}
 
 
 @st.cache_data(ttl=3600)
-def _load_cdi(start_str: str) -> dict:
+def _load_cdi(start_str: str, end_str: str = "") -> dict:
     start = date.fromisoformat(start_str)
-    series = fetch_cdi_daily(start, date.today())
+    end   = date.fromisoformat(end_str) if end_str else date.today()
+    series = fetch_cdi_daily(start, end)
     if series.empty:
         return {}
     return {str(k): v for k, v in series.items()}
 
 
 @st.cache_data(ttl=3600)
-def _load_ipca(start_str: str) -> dict:
+def _load_ipca(start_str: str, end_str: str = "") -> dict:
     start = date.fromisoformat(start_str)
-    series = fetch_ipca_daily(start, date.today())
+    end   = date.fromisoformat(end_str) if end_str else date.today()
+    series = fetch_ipca_daily(start, end)
     if series.empty:
         return {}
     return {str(k): v for k, v in series.items()}
@@ -174,7 +178,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
             f"<h1>{portfolio_cfg['flag']} {portfolio_cfg['name']}"
             f"<span class='dot-mark'></span></h1>"
             f"<p style='color:#ABABAB;font-size:0.8rem;margin-top:-8px;'>"
-            f"Performance dashboard · {currency} · teste GitHub Desktop</p>",
+            f"Performance dashboard · {currency}</p>",
             unsafe_allow_html=True,
         )
     with col_refresh:
@@ -225,10 +229,29 @@ def render_dashboard(portfolio_cfg: dict) -> None:
             st.cache_data.clear()
             st.rerun()
 
+    # ── Data de corte (sidebar) ───────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown(
+            "<div style='font-size:0.8rem;color:#ABABAB;margin-bottom:4px'>Visualizar até</div>",
+            unsafe_allow_html=True,
+        )
+        cutoff_val = st.date_input(
+            label="data_corte",
+            value=None,
+            min_value=date.fromisoformat(start_date),
+            max_value=date.today(),
+            key=f"cutoff_{key}",
+            label_visibility="collapsed",
+        )
+        cutoff_str = str(cutoff_val) if cutoff_val else ""
+        if cutoff_val:
+            st.caption(f"📅 Até {cutoff_val.strftime('%d/%m/%Y')}")
+
     st.divider()
 
     # KPIs
-    data = _load_data(key)
+    data = _load_data(key, cutoff_str)
 
     c2, c3, c4, c5 = st.columns(4)
     with c2:
@@ -242,7 +265,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
         _bmark_lines = []
         if tot is not None:
             if show_cdi:
-                _raw = _load_cdi(start_date)
+                _raw = _load_cdi(start_date, cutoff_str)
                 if _raw:
                     _bret = list(_raw.values())[-1] - 1.0
                     _d = tot - _bret
@@ -252,7 +275,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
                         f"<span style='color:#ABABAB'> vs {cdi_label}</span>"
                     )
             if show_ipca:
-                _raw = _load_ipca(start_date)
+                _raw = _load_ipca(start_date, cutoff_str)
                 if _raw:
                     _bret = list(_raw.values())[-1] - 1.0
                     _d = tot - _bret
@@ -262,7 +285,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
                         f"<span style='color:#ABABAB'> vs {ipca_label}</span>"
                     )
             if show_cpi:
-                _raw = _load_cpi(start_date)
+                _raw = _load_cpi(start_date, cutoff_str)
                 if _raw:
                     _bret = list(_raw.values())[-1] - 1.0
                     _d = tot - _bret
@@ -322,7 +345,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
         trading_dates = set(snap_df["Date"].astype(str))
 
         if show_cpi:
-            cpi_raw = _load_cpi(start_date)
+            cpi_raw = _load_cpi(start_date, cutoff_str)
             if cpi_raw:
                 cpi_series = pd.Series(cpi_raw)
                 cpi_series.index = pd.to_datetime(list(cpi_raw.keys())).date
@@ -337,11 +360,10 @@ def render_dashboard(portfolio_cfg: dict) -> None:
                     ))
 
         if show_cdi:
-            cdi_raw = _load_cdi(start_date)
+            cdi_raw = _load_cdi(start_date, cutoff_str)
             if cdi_raw:
                 cdi_series = pd.Series(cdi_raw)
                 cdi_series.index = pd.to_datetime(list(cdi_raw.keys())).date
-                # CDI is daily — include all available dates (not just trading dates)
                 if not cdi_series.empty:
                     fig.add_trace(go.Scatter(
                         x=list(cdi_series.index), y=cdi_series.values,
@@ -350,7 +372,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
                     ))
 
         if show_ipca:
-            ipca_raw = _load_ipca(start_date)
+            ipca_raw = _load_ipca(start_date, cutoff_str)
             if ipca_raw:
                 ipca_series = pd.Series(ipca_raw)
                 ipca_series.index = pd.to_datetime(list(ipca_raw.keys())).date
