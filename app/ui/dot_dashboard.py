@@ -36,9 +36,9 @@ def _fmt_pct(v, decimals=2):
 
 
 @st.cache_data(ttl=300)
-def _load_dot(cutoff_str: str = "") -> dict:
+def _load_dot(cutoff_str: str = "", w_global: float = 0.5, w_brazil: float = 0.5) -> dict:
     cutoff = date.fromisoformat(cutoff_str) if cutoff_str else None
-    dot    = compute_dot_series(cutoff=cutoff, w_brazil=_W_BRAZIL, w_global=_W_GLOBAL)
+    dot    = compute_dot_series(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global)
     g_norm = compute_global_usd_norm(cutoff=cutoff)
     b_norm = compute_brazil_usd_norm(cutoff=cutoff)
     stats  = _returns_from_series(dot)
@@ -57,14 +57,25 @@ def render_dot_dashboard() -> None:
     st.markdown(
         f"<h1>⬤ DOT Portfolio<span class='dot-mark'></span></h1>"
         f"<p style='color:#ABABAB;font-size:0.8rem;margin-top:-8px;'>"
-        f"Global + Brazil · Performance combinada em USD · "
-        f"{int(_W_GLOBAL*100)}% Global / {int(_W_BRAZIL*100)}% Brazil</p>",
+        f"Global + Brazil · Performance combinada em USD</p>",
         unsafe_allow_html=True,
     )
 
-    # ── Data de corte (sidebar) ───────────────────────────────────────────────
+    # ── Sidebar: pesos + data de corte ───────────────────────────────────────
     brazil_start = PORTFOLIOS["brazil"]["start_date"]
     with st.sidebar:
+        st.markdown("---")
+        st.markdown(
+            "<div style='font-size:0.8rem;color:#ABABAB;margin-bottom:6px'>Composição do DOT</div>",
+            unsafe_allow_html=True,
+        )
+        w_global_pct = st.slider(
+            "Global Portfolio (%)", min_value=0, max_value=100,
+            value=int(_W_GLOBAL * 100), step=5, key="dot_w_global",
+        )
+        w_brazil_pct = 100 - w_global_pct
+        st.caption(f"🇧🇷 Brazil Portfolio: {w_brazil_pct}%")
+
         st.markdown("---")
         st.markdown(
             "<div style='font-size:0.8rem;color:#ABABAB;margin-bottom:4px'>Visualizar até</div>",
@@ -82,10 +93,13 @@ def render_dot_dashboard() -> None:
         if cutoff_val:
             st.caption(f"📅 Até {cutoff_val.strftime('%d/%m/%Y')}")
 
+    w_global = w_global_pct / 100.0
+    w_brazil = w_brazil_pct / 100.0
+
     st.divider()
 
     # ── Carrega dados ─────────────────────────────────────────────────────────
-    data  = _load_dot(cutoff_str)
+    data  = _load_dot(cutoff_str, w_global, w_brazil)
     stats = data["stats"]
 
     if data["dot"].empty:
@@ -193,7 +207,7 @@ def render_dot_dashboard() -> None:
             f"border:1px solid #EFEFEF'>"
             f"<div style='font-size:0.8rem;color:#929292'>🌍 Global Portfolio</div>"
             f"<div style='font-size:1.1rem;font-weight:700;color:#1E1E1E;margin-top:4px'>"
-            f"{int(_W_GLOBAL*100)}% do DOT</div>"
+            f"{int(w_global*100)}% do DOT</div>"
             f"<div style='font-size:0.85rem;color:#5E5E5E;margin-top:2px'>"
             f"Since inception (USD): {_fmt_pct(g_total)}</div>"
             f"</div>",
@@ -205,7 +219,7 @@ def render_dot_dashboard() -> None:
             f"border:1px solid #EFEFEF'>"
             f"<div style='font-size:0.8rem;color:#929292'>🇧🇷 Brazil Portfolio</div>"
             f"<div style='font-size:1.1rem;font-weight:700;color:#1E1E1E;margin-top:4px'>"
-            f"{int(_W_BRAZIL*100)}% do DOT</div>"
+            f"{int(w_brazil*100)}% do DOT</div>"
             f"<div style='font-size:0.85rem;color:#5E5E5E;margin-top:2px'>"
             f"Since inception (USD): {_fmt_pct(b_total)}</div>"
             f"</div>",
