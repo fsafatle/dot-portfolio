@@ -40,9 +40,11 @@ _BENCH_LABEL      = _CFG.get("bench_label", f"{_CFG.get('bench_multiplier', 1.5)
 
 
 @st.cache_data(ttl=300)
-def _load_dot(cutoff_str: str = "", w_global: float = 0.5, w_brazil: float = 0.5) -> dict:
+def _load_dot(cutoff_str: str = "", w_global: float = 0.5, w_brazil: float = 0.5,
+              rebal_freq: str = "monthly") -> dict:
     cutoff = date.fromisoformat(cutoff_str) if cutoff_str else None
-    dot    = compute_dot_series(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global)
+    dot    = compute_dot_series(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global,
+                                rebal_freq=rebal_freq)
     g_norm = compute_global_usd_norm(cutoff=cutoff)
     b_norm = compute_brazil_usd_norm(cutoff=cutoff)
     bench  = compute_blended_benchmark(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global,
@@ -105,17 +107,31 @@ def render_dot_dashboard() -> None:
         )
         w_brazil_pct = 100 - w_global_pct
         st.markdown(
-            f"<div style='font-size:0.8rem;color:#5E5E5E;margin-top:2px'>"
+            f"<div style='font-size:0.8rem;color:#5E5E5E;margin-top:4px'>"
             f"🌍 Global: <b>{w_global_pct}%</b> &nbsp;|&nbsp; "
             f"🇧🇷 Brazil: <b>{w_brazil_pct}%</b></div>",
             unsafe_allow_html=True,
+        )
+        st.markdown(
+            "<div style='font-size:0.75rem;color:#929292;margin-top:10px;margin-bottom:2px'>"
+            "Rebalanceamento</div>",
+            unsafe_allow_html=True,
+        )
+        rebal_freq = st.radio(
+            "rebal",
+            options=["daily", "monthly", "annual"],
+            format_func=lambda x: {"daily": "Diário", "monthly": "Mensal", "annual": "Anual"}[x],
+            index=1,
+            key="dot_rebal_freq",
+            label_visibility="collapsed",
+            horizontal=True,
         )
 
     w_global = w_global_pct / 100.0
     w_brazil = w_brazil_pct / 100.0
 
     # ── Carrega dados ─────────────────────────────────────────────────────────
-    data  = _load_dot(cutoff_str, w_global, w_brazil)
+    data  = _load_dot(cutoff_str, w_global, w_brazil, rebal_freq)
     stats = data["stats"]
 
     if data["dot"].empty:
