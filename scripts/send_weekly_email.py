@@ -137,7 +137,7 @@ def collect_dot():
 
     return dict(
         tot=stats["total"], mtd=stats["mtd"],
-        ytd=stats["ytd"],   daily=stats["daily"],
+        ytd=stats["ytd"],   weekly=stats["weekly"], daily=stats["daily"],
         bench_tot=_bench_total(bench),
         w_global=w_g, w_brazil=w_b,
         rebal_freq=rebal_freq,
