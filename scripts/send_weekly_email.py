@@ -211,7 +211,11 @@ def build_slack_payload(g, b, d, report_date):
         _portfolio_block("🇧🇷", "Brazil Portfolio", "BRL", b, b_bench),
     ]
 
-    return {"blocks": blocks}
+    return {
+        "username":   "DOT Portfolio",
+        "icon_emoji": ":bar_chart:",
+        "blocks": blocks,
+    }
 
 
 # ── Envio ─────────────────────────────────────────────────────────────────────
