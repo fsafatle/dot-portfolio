@@ -183,9 +183,9 @@ def compute_brazil_usd_norm(cutoff: Optional[date] = None) -> pd.Series:
 
 
 def _returns_from_series(s: pd.Series) -> dict:
-    """Compute daily / MTD / YTD / since-inception returns from an index series."""
+    """Compute daily / weekly / MTD / YTD / since-inception returns from an index series."""
     if s.empty or len(s) < 2:
-        return dict(daily=None, mtd=None, ytd=None, total=None, last_date=None)
+        return dict(daily=None, weekly=None, mtd=None, ytd=None, total=None, last_date=None)
 
     last_date = s.index[-1]
     last_val  = s.iloc[-1]
@@ -193,6 +193,12 @@ def _returns_from_series(s: pd.Series) -> dict:
 
     # Daily
     daily = (last_val / s.iloc[-2]) - 1.0 if len(s) >= 2 else None
+
+    # Weekly (últimos 7 dias)
+    from datetime import timedelta
+    week_ago = last_date - timedelta(days=7)
+    w_s = s[s.index >= week_ago]
+    weekly = (w_s.iloc[-1] / w_s.iloc[0]) - 1.0 if len(w_s) >= 2 else None
 
     # MTD
     month_start = last_date.replace(day=1)
@@ -209,7 +215,7 @@ def _returns_from_series(s: pd.Series) -> dict:
     # Since inception
     total = (last_val / first_val) - 1.0
 
-    return dict(daily=daily, mtd=mtd, ytd=ytd, total=total, last_date=last_date)
+    return dict(daily=daily, weekly=weekly, mtd=mtd, ytd=ytd, total=total, last_date=last_date)
 
 
 def _apply_multiplier(series: pd.Series, multiplier: float) -> pd.Series:

@@ -77,10 +77,11 @@ def collect_global():
     cfg = PORTFOLIOS["global"]
     db  = get_db_for("global")
     try:
-        tot   = performance.total_return(db)
-        mtd   = performance.mtd_return(db)
-        ytd   = performance.ytd_return(db)
-        daily = performance.latest_daily_return(db)
+        tot    = performance.total_return(db)
+        ytd    = performance.ytd_return(db)
+        mtd    = performance.mtd_return(db)
+        weekly = performance.weekly_return(db)
+        daily  = performance.latest_daily_return(db)
     finally:
         db.close()
 
@@ -89,7 +90,7 @@ def collect_global():
     cpi15 = _apply_multiplier(cpi, 1.5)
 
     return dict(
-        tot=tot, mtd=mtd, ytd=ytd, daily=daily,
+        tot=tot, ytd=ytd, mtd=mtd, weekly=weekly, daily=daily,
         cpi_tot=_bench_total(cpi),
         cpi15_tot=_bench_total(cpi15),
     )
@@ -99,10 +100,11 @@ def collect_brazil():
     cfg = PORTFOLIOS["brazil"]
     db  = get_db_for("brazil")
     try:
-        tot   = performance.total_return(db)
-        mtd   = performance.mtd_return(db)
-        ytd   = performance.ytd_return(db)
-        daily = performance.latest_daily_return(db)
+        tot    = performance.total_return(db)
+        ytd    = performance.ytd_return(db)
+        mtd    = performance.mtd_return(db)
+        weekly = performance.weekly_return(db)
+        daily  = performance.latest_daily_return(db)
     finally:
         db.close()
 
@@ -112,7 +114,7 @@ def collect_brazil():
     ipca15 = _apply_multiplier(ipca, 1.5)
 
     return dict(
-        tot=tot, mtd=mtd, ytd=ytd, daily=daily,
+        tot=tot, ytd=ytd, mtd=mtd, weekly=weekly, daily=daily,
         cdi_tot=_bench_total(cdi),
         ipca_tot=_bench_total(ipca),
         ipca15_tot=_bench_total(ipca15),
@@ -153,13 +155,15 @@ def _portfolio_block(flag, name, currency, data, bench_lines):
     ytd_str   = _pct(data["ytd"])
     daily_str = _pct(data["daily"])
 
+    weekly_str = _pct(data.get("weekly"))
     text = (
         f"*{flag} {name}* _{currency}_\n"
         f"```"
-        f"Since Inception  {tot_str}{_emoji_ret(data['tot'])}\n"
-        f"YTD              {ytd_str}{_emoji_ret(data['ytd'])}\n"
-        f"MTD              {mtd_str}{_emoji_ret(data['mtd'])}\n"
         f"Daily            {daily_str}{_emoji_ret(data['daily'])}\n"
+        f"Semanal          {weekly_str}{_emoji_ret(data.get('weekly'))}\n"
+        f"MTD              {mtd_str}{_emoji_ret(data['mtd'])}\n"
+        f"YTD              {ytd_str}{_emoji_ret(data['ytd'])}\n"
+        f"Since Inception  {tot_str}{_emoji_ret(data['tot'])}\n"
         f"```"
         f"{bench_lines}"
     )

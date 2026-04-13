@@ -300,6 +300,23 @@ def asset_performance(db: Session, cutoff: Optional[date] = None) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
+def weekly_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
+    """Retorno dos últimos 7 dias corridos."""
+    today = cutoff or date.today()
+    week_ago = today - timedelta(days=7)
+    q = (
+        db.query(PortfolioSnapshot)
+        .filter(PortfolioSnapshot.date >= week_ago)
+        .order_by(PortfolioSnapshot.date)
+    )
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    rows = q.all()
+    if len(rows) < 2:
+        return None
+    return (rows[-1].index_value / rows[0].index_value) - 1.0
+
+
 def mtd_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
     today = cutoff or date.today()
     month_start = today.replace(day=1)
