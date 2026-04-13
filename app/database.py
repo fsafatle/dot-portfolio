@@ -28,6 +28,8 @@ _engines: dict[str, object] = {}
 
 def _build_engine(url: str):
     """Cria engine adequado para SQLite ou PostgreSQL."""
+    # Remove espaços e quebras de linha que podem vir ao colar em secrets
+    url = url.strip()
     # Heroku/Render/Railway exportam "postgres://" — SQLAlchemy exige "postgresql://"
     url = url.replace("postgres://", "postgresql://", 1)
     kwargs = {}
