@@ -187,14 +187,10 @@ def build_slack_payload(g, b, d, report_date):
     )
 
     blocks = [
-        # Header
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": "⬤ DOT Portfolio · Resumo Semanal"}
-        },
+        # Data de referência
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"{prev_str} → {week_str}"}]
+            "elements": [{"type": "mrkdwn", "text": f"📅 Dados de referência: *{week_str}*"}]
         },
         {"type": "divider"},
 
