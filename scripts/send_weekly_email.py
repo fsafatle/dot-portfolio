@@ -120,12 +120,13 @@ def collect_brazil():
 
 
 def collect_dot():
-    dot_cfg = PORTFOLIOS["dot"]
-    w_g  = dot_cfg.get("w_global", 0.5)
-    w_b  = dot_cfg.get("w_brazil", 0.5)
-    mult = dot_cfg.get("bench_multiplier", 1.5)
+    dot_cfg    = PORTFOLIOS["dot"]
+    w_g        = dot_cfg.get("w_global", 0.5)
+    w_b        = dot_cfg.get("w_brazil", 0.5)
+    mult       = dot_cfg.get("bench_multiplier", 1.5)
+    rebal_freq = dot_cfg.get("rebal_freq", "annual")
 
-    dot   = compute_dot_series(w_global=w_g, w_brazil=w_b, rebal_freq="monthly")
+    dot   = compute_dot_series(w_global=w_g, w_brazil=w_b, rebal_freq=rebal_freq)
     bench = compute_blended_benchmark(w_global=w_g, w_brazil=w_b, multiplier=mult)
     stats = _returns_from_series(dot)
 
@@ -134,6 +135,7 @@ def collect_dot():
         ytd=stats["ytd"],   daily=stats["daily"],
         bench_tot=_bench_total(bench),
         w_global=w_g, w_brazil=w_b,
+        rebal_freq=rebal_freq,
         bench_label=dot_cfg.get("bench_label", "1.5× CPI+IPCA"),
     )
 
@@ -181,9 +183,11 @@ def build_slack_payload(g, b, d, report_date):
     )
     # Benchmark DOT
     dot_bench = _pp_str(_pp(d["tot"], d["bench_tot"]), d["bench_label"])
+    _rebal_label = {"daily": "Diário", "monthly": "Mensal", "annual": "Anual"}
     dot_comp  = (
         f"_Composição: {int(d['w_global']*100)}% Global / "
-        f"{int(d['w_brazil']*100)}% Brazil · Rebal. mensal_"
+        f"{int(d['w_brazil']*100)}% Brazil · "
+        f"Rebal. {_rebal_label.get(d['rebal_freq'], d['rebal_freq'])}_"
     )
 
     blocks = [

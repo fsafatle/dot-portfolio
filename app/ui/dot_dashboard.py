@@ -22,10 +22,13 @@ _LIGHT    = "#D5D5D5"
 _BLUE     = "#3b82f6"
 _GREEN    = "#10b981"
 
-# Pesos padrão — vêm do config
+# Padrões — vêm do config
 _CFG = PORTFOLIOS.get("dot", {})
-_W_BRAZIL_DEFAULT = int(_CFG.get("w_brazil", 0.50) * 100)
-_W_GLOBAL_DEFAULT = int(_CFG.get("w_global", 0.50) * 100)
+_W_BRAZIL_DEFAULT  = int(_CFG.get("w_brazil",   0.50) * 100)
+_W_GLOBAL_DEFAULT  = int(_CFG.get("w_global",   0.50) * 100)
+_REBAL_FREQ_DEFAULT = _CFG.get("rebal_freq", "annual")
+_REBAL_OPTIONS      = ["daily", "monthly", "annual"]
+_REBAL_INDEX        = _REBAL_OPTIONS.index(_REBAL_FREQ_DEFAULT) if _REBAL_FREQ_DEFAULT in _REBAL_OPTIONS else 2
 
 
 def _fmt_pct(v, decimals=2):
@@ -121,7 +124,7 @@ def render_dot_dashboard() -> None:
             "rebal",
             options=["daily", "monthly", "annual"],
             format_func=lambda x: {"daily": "Diário", "monthly": "Mensal", "annual": "Anual"}[x],
-            index=1,
+            index=_REBAL_INDEX,
             key="dot_rebal_freq",
             label_visibility="collapsed",
             horizontal=True,

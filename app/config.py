@@ -74,6 +74,7 @@ PORTFOLIOS: dict[str, dict] = {
         "w_brazil":         0.50,   # peso do Brazil Portfolio (BRL→USD)
         "bench_multiplier": 1.5,    # multiplicador dos benchmarks CPI+IPCA
         "bench_label":      "1.5× CPI+IPCA (USD)",
+        "rebal_freq":       "annual",  # frequência de rebalanceamento: daily | monthly | annual
     },
     "global": {
         "key":        "global",
