@@ -205,15 +205,18 @@ def _returns_from_series(s: pd.Series) -> dict:
     mtd_s = s[s.index >= month_start]
     mtd = (mtd_s.iloc[-1] / mtd_s.iloc[0]) - 1.0 if len(mtd_s) >= 2 else None
 
+    # Since inception
+    total = (last_val / first_val) - 1.0
+
     # YTD
     year_start = last_date.replace(month=1, day=1)
     inception  = s.index[0]
     ytd_ref    = inception if inception >= year_start else year_start
-    ytd_s = s[s.index >= ytd_ref]
-    ytd = (ytd_s.iloc[-1] / ytd_s.iloc[0]) - 1.0 if len(ytd_s) >= 2 else None
-
-    # Since inception
-    total = (last_val / first_val) - 1.0
+    if ytd_ref <= inception:
+        ytd = total  # same period — reuse to avoid floating point divergence
+    else:
+        ytd_s = s[s.index >= ytd_ref]
+        ytd = (ytd_s.iloc[-1] / ytd_s.iloc[0]) - 1.0 if len(ytd_s) >= 2 else None
 
     return dict(daily=daily, weekly=weekly, mtd=mtd, ytd=ytd, total=total, last_date=last_date)
 

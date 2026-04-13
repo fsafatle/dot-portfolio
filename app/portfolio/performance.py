@@ -359,6 +359,9 @@ def ytd_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
         if portfolio_inception >= calendar_year_start - timedelta(days=93)
         else calendar_year_start
     )
+    # If YTD start == inception, reuse total_return to avoid floating point divergence
+    if ytd_ref <= portfolio_inception:
+        return total_return(db, cutoff)
     q = (
         db.query(PortfolioSnapshot)
         .filter(PortfolioSnapshot.date >= ytd_ref)
