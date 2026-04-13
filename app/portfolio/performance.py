@@ -57,6 +57,14 @@ def latest_daily_return(db: Session, cutoff: Optional[date] = None) -> Optional[
     return row.daily_return if row else None
 
 
+def latest_snapshot_date(db: Session, cutoff: Optional[date] = None) -> Optional[date]:
+    q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc())
+    if cutoff:
+        q = q.filter(PortfolioSnapshot.date <= cutoff)
+    row = q.first()
+    return row.date if row else None
+
+
 def latest_index_value(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
     q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc())
     if cutoff:

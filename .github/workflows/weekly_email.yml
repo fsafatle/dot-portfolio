@@ -12,7 +12,7 @@ name: Resumo Diário DOT Portfolio (Slack)
 # ──────────────────────────────────────────────────────────────────
 on:
   schedule:
-    - cron: "0 23 * * *"   # todos os dias às 20h BRT (23h UTC)
+    - cron: "0 23 * * 1-5" # segunda a sexta às 20h BRT (23h UTC)
   workflow_dispatch:        # permite rodar manualmente pelo GitHub
 
 jobs:

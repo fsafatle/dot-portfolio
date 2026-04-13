@@ -77,20 +77,23 @@ def collect_global():
     cfg = PORTFOLIOS["global"]
     db  = get_db_for("global")
     try:
-        tot    = performance.total_return(db)
-        ytd    = performance.ytd_return(db)
-        mtd    = performance.mtd_return(db)
-        weekly = performance.weekly_return(db)
-        daily  = performance.latest_daily_return(db)
+        tot      = performance.total_return(db)
+        ytd      = performance.ytd_return(db)
+        mtd      = performance.mtd_return(db)
+        weekly   = performance.weekly_return(db)
+        daily    = performance.latest_daily_return(db)
+        last_date = performance.latest_snapshot_date(db)
     finally:
         db.close()
 
     start = cfg["start_date"]
-    cpi   = fetch_cpi_daily(date.fromisoformat(start), date.today())
+    ref   = last_date or date.today()
+    cpi   = fetch_cpi_daily(date.fromisoformat(start), ref)
     cpi15 = _apply_multiplier(cpi, 1.5)
 
     return dict(
         tot=tot, ytd=ytd, mtd=mtd, weekly=weekly, daily=daily,
+        last_date=last_date,
         cpi_tot=_bench_total(cpi),
         cpi15_tot=_bench_total(cpi15),
     )
@@ -239,13 +242,16 @@ def send_slack(payload: dict):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    today = date.today()
-    print(f"📊 Coletando dados ({today})...")
+    print(f"📊 Coletando dados...")
 
     g = collect_global()
     b = collect_brazil()
     d = collect_dot()
 
+    # Use last available trading day from the portfolio data
+    report_date = g.get("last_date") or date.today()
+    print(f"📅 Data de referência: {report_date}")
+
     print("💬 Enviando para Slack...")
-    payload = build_slack_payload(g, b, d, today)
+    payload = build_slack_payload(g, b, d, report_date)
     send_slack(payload)
