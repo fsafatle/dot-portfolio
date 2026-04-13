@@ -1,4 +1,4 @@
-name: Resumo Semanal DOT Portfolio
+name: Resumo Semanal DOT Portfolio (Slack)
 
 on:
   schedule:
@@ -26,7 +26,5 @@ jobs:
         env:
           GLOBAL_DATABASE_URL: ${{ secrets.GLOBAL_DATABASE_URL }}
           BRAZIL_DATABASE_URL: ${{ secrets.BRAZIL_DATABASE_URL }}
-          EMAIL_SENDER:        ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD:      ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECIPIENTS:    ${{ secrets.EMAIL_RECIPIENTS }}
+          SLACK_WEBHOOK_URL:   ${{ secrets.SLACK_WEBHOOK_URL }}
         run: python scripts/send_weekly_email.py
