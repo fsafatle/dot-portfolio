@@ -160,7 +160,7 @@ def _portfolio_block(flag, name, currency, data, bench_lines):
         f"*{flag} {name}* _{currency}_\n"
         f"```"
         f"Daily            {daily_str}{_emoji_ret(data['daily'])}\n"
-        f"Semanal          {weekly_str}{_emoji_ret(data.get('weekly'))}\n"
+        f"Weekly           {weekly_str}{_emoji_ret(data.get('weekly'))}\n"
         f"MTD              {mtd_str}{_emoji_ret(data['mtd'])}\n"
         f"YTD              {ytd_str}{_emoji_ret(data['ytd'])}\n"
         f"Since Inception  {tot_str}{_emoji_ret(data['tot'])}\n"

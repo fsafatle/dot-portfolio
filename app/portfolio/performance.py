@@ -301,16 +301,21 @@ def asset_performance(db: Session, cutoff: Optional[date] = None) -> pd.DataFram
 
 
 def weekly_return(db: Session, cutoff: Optional[date] = None) -> Optional[float]:
-    """Retorno dos últimos 7 dias corridos."""
-    today = cutoff or date.today()
-    week_ago = today - timedelta(days=7)
+    """Retorno dos últimos 7 dias corridos (âncora = último snapshot disponível)."""
+    # Use the latest available snapshot as anchor (not date.today()) so weekends/holidays work
+    latest_q = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc())
+    if cutoff:
+        latest_q = latest_q.filter(PortfolioSnapshot.date <= cutoff)
+    latest = latest_q.first()
+    if latest is None:
+        return None
+    anchor = latest.date
+    week_ago = anchor - timedelta(days=7)
     q = (
         db.query(PortfolioSnapshot)
-        .filter(PortfolioSnapshot.date >= week_ago)
+        .filter(PortfolioSnapshot.date >= week_ago, PortfolioSnapshot.date <= anchor)
         .order_by(PortfolioSnapshot.date)
     )
-    if cutoff:
-        q = q.filter(PortfolioSnapshot.date <= cutoff)
     rows = q.all()
     if len(rows) < 2:
         return None
