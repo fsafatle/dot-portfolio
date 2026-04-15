@@ -103,21 +103,24 @@ def collect_brazil():
     cfg = PORTFOLIOS["brazil"]
     db  = get_db_for("brazil")
     try:
-        tot    = performance.total_return(db)
-        ytd    = performance.ytd_return(db)
-        mtd    = performance.mtd_return(db)
-        weekly = performance.weekly_return(db)
-        daily  = performance.latest_daily_return(db)
+        tot       = performance.total_return(db)
+        ytd       = performance.ytd_return(db)
+        mtd       = performance.mtd_return(db)
+        weekly    = performance.weekly_return(db)
+        daily     = performance.latest_daily_return(db)
+        last_date = performance.latest_snapshot_date(db)
     finally:
         db.close()
 
     start  = cfg["start_date"]
-    cdi    = fetch_cdi_daily(date.fromisoformat(start), date.today())
-    ipca   = fetch_ipca_daily(date.fromisoformat(start), date.today())
+    ref    = last_date or date.today()
+    cdi    = fetch_cdi_daily(date.fromisoformat(start), ref)
+    ipca   = fetch_ipca_daily(date.fromisoformat(start), ref)
     ipca15 = _apply_multiplier(ipca, 1.5)
 
     return dict(
         tot=tot, ytd=ytd, mtd=mtd, weekly=weekly, daily=daily,
+        last_date=last_date,
         cdi_tot=_bench_total(cdi),
         ipca_tot=_bench_total(ipca),
         ipca15_tot=_bench_total(ipca15),
@@ -248,9 +251,19 @@ if __name__ == "__main__":
     b = collect_brazil()
     d = collect_dot()
 
-    # Use last available trading day from the portfolio data
-    report_date = g.get("last_date") or date.today()
+    # Use the most recent snapshot date across all portfolios
+    candidates = [g.get("last_date"), b.get("last_date")]
+    report_date = max((dt for dt in candidates if dt is not None), default=date.today())
     print(f"📅 Data de referência: {report_date}")
+
+    # Abort if data is stale (more than 3 calendar days old)
+    staleness = (date.today() - report_date).days
+    if staleness > 3:
+        print(
+            f"⚠️  Dados desatualizados ({report_date}, {staleness} dias atrás). "
+            f"Verifique o processo de atualização de snapshots. Envio cancelado."
+        )
+        sys.exit(0)
 
     print("💬 Enviando para Slack...")
     payload = build_slack_payload(g, b, d, report_date)
