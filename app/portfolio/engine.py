@@ -157,8 +157,13 @@ def _upsert_prices(
     (to capture same-day intraday updates). Historical prices are kept stable
     so that snapshot calculations don't drift between refreshes.
     """
+    from sqlalchemy.exc import IntegrityError
+
     today = date.today()
     cutoff = today - timedelta(days=2)
+
+    # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
+    series = series[~series.index.duplicated(keep="last")]
 
     for dt, price in series.items():
         if pd.isna(price):
@@ -172,7 +177,16 @@ def _upsert_prices(
             if dt >= cutoff:          # Only update recent prices
                 existing.close_price = float(price)
         else:
-            db.add(Price(asset_id=asset_id, date=dt, close_price=float(price), source=source))
+            sp = db.begin_nested()    # savepoint — protects the outer transaction
+            try:
+                db.add(Price(asset_id=asset_id, date=dt, close_price=float(price), source=source))
+                sp.commit()
+            except IntegrityError:
+                sp.rollback()         # undo only this insert, keep everything else
+                # Race: record appeared between our SELECT and INSERT — just update
+                existing = db.query(Price).filter_by(asset_id=asset_id, date=dt).first()
+                if existing and dt >= cutoff:
+                    existing.close_price = float(price)
 
 
 def upsert_manual_price(db: Session, asset_id: int, price_date: date, price: float) -> None:
