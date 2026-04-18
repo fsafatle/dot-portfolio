@@ -162,11 +162,15 @@ def _upsert_prices(
 
     # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
     series = series[~series.index.duplicated(keep="last")]
-    clean  = {dt: float(p) for dt, p in series.items() if not pd.isna(p)}
+    # Normalize index to datetime.date (Yahoo returns pd.Timestamp which has different hash)
+    clean = {
+        (dt.date() if hasattr(dt, "date") and callable(dt.date) else dt): float(p)
+        for dt, p in series.items() if not pd.isna(p)
+    }
     if not clean:
         return
 
-    # Bulk-fetch existing dates for this asset
+    # Bulk-fetch existing dates for this asset (already datetime.date from SQLAlchemy)
     existing_dates = set(
         row.date for row in
         db.query(Price.date).filter_by(asset_id=asset_id).all()
@@ -179,6 +183,7 @@ def _upsert_prices(
             Price.asset_id == asset_id,
             Price.date.in_(recent),
         ).delete(synchronize_session=False)
+        db.flush()
         existing_dates -= set(recent)
 
     # Insert missing records
