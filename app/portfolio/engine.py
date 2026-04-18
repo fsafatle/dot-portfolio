@@ -373,11 +373,11 @@ def build_snapshots(
                 price = prices_df.loc[current_date, ticker]
                 if pd.isna(price) or price == 0:
                     continue
-                units[alloc.asset_id] = (alloc.weight * portfolio_value) / price
+                units[alloc.asset_id] = (alloc.weight * portfolio_value) / float(price)
 
             db.add(PortfolioSnapshot(
                 date=current_date,
-                index_value=portfolio_value,
+                index_value=float(portfolio_value),
                 daily_return=None,
             ))
             initialized = True
@@ -395,7 +395,7 @@ def build_snapshots(
             if price is None or pd.isna(price):
                 missing = True
                 break
-            new_value += qty * price
+            new_value += qty * float(price)
 
         if missing or new_value == 0:
             continue
@@ -405,8 +405,8 @@ def build_snapshots(
 
         db.add(PortfolioSnapshot(
             date=current_date,
-            index_value=portfolio_value,
-            daily_return=daily_ret,
+            index_value=float(portfolio_value),
+            daily_return=float(daily_ret),
         ))
 
         # Rebalance (after calculating return — value is unchanged by rebalance)
@@ -421,7 +421,7 @@ def build_snapshots(
                 price = prices_df.loc[current_date, ticker]
                 if pd.isna(price) or price == 0:
                     continue
-                units[alloc.asset_id] = (alloc.weight * portfolio_value) / price
+                units[alloc.asset_id] = (alloc.weight * portfolio_value) / float(price)
 
     db.commit()
     logger.info("Snapshots built up to %s", today)
