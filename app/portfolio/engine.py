@@ -157,36 +157,34 @@ def _upsert_prices(
     (to capture same-day intraday updates). Historical prices are kept stable
     so that snapshot calculations don't drift between refreshes.
     """
-    from sqlalchemy.exc import IntegrityError
-
-    today = date.today()
+    today  = date.today()
     cutoff = today - timedelta(days=2)
 
     # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
     series = series[~series.index.duplicated(keep="last")]
+    clean  = {dt: float(p) for dt, p in series.items() if not pd.isna(p)}
+    if not clean:
+        return
 
-    for dt, price in series.items():
-        if pd.isna(price):
-            continue
-        existing = (
-            db.query(Price)
-            .filter_by(asset_id=asset_id, date=dt)
-            .first()
-        )
-        if existing:
-            if dt >= cutoff:          # Only update recent prices
-                existing.close_price = float(price)
-        else:
-            sp = db.begin_nested()    # savepoint — protects the outer transaction
-            try:
-                db.add(Price(asset_id=asset_id, date=dt, close_price=float(price), source=source))
-                sp.commit()
-            except IntegrityError:
-                sp.rollback()         # undo only this insert, keep everything else
-                # Race: record appeared between our SELECT and INSERT — just update
-                existing = db.query(Price).filter_by(asset_id=asset_id, date=dt).first()
-                if existing and dt >= cutoff:
-                    existing.close_price = float(price)
+    # Bulk-fetch existing dates for this asset
+    existing_dates = set(
+        row.date for row in
+        db.query(Price.date).filter_by(asset_id=asset_id).all()
+    )
+
+    # Delete recent records so they can be re-inserted with fresh prices
+    recent = [dt for dt in clean if dt >= cutoff]
+    if recent:
+        db.query(Price).filter(
+            Price.asset_id == asset_id,
+            Price.date.in_(recent),
+        ).delete(synchronize_session=False)
+        existing_dates -= set(recent)
+
+    # Insert missing records
+    for dt, price in clean.items():
+        if dt not in existing_dates:
+            db.add(Price(asset_id=asset_id, date=dt, close_price=price, source=source))
 
 
 def upsert_manual_price(db: Session, asset_id: int, price_date: date, price: float) -> None:

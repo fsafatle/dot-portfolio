@@ -369,28 +369,19 @@ def _sync_to_legacy_snapshots(
           .all()
     )
 
-    from sqlalchemy.exc import IntegrityError
+    # Delete existing LegacySnapshots in range first — avoids SELECT-then-INSERT conflicts
+    db.query(LegacySnapshot).filter(
+        LegacySnapshot.date >= from_date,
+        LegacySnapshot.date <= end,
+    ).delete(synchronize_session=False)
+    db.flush()
 
     for s in new_snaps:
-        existing = db.query(LegacySnapshot).filter_by(date=s.date).first()
-        if existing:
-            existing.index_value  = s.cota
-            existing.daily_return = s.daily_return
-        else:
-            sp = db.begin_nested()
-            try:
-                db.add(LegacySnapshot(
-                    date         = s.date,
-                    index_value  = s.cota,
-                    daily_return = s.daily_return,
-                ))
-                sp.commit()
-            except IntegrityError:
-                sp.rollback()
-                existing = db.query(LegacySnapshot).filter_by(date=s.date).first()
-                if existing:
-                    existing.index_value  = s.cota
-                    existing.daily_return = s.daily_return
+        db.add(LegacySnapshot(
+            date         = s.date,
+            index_value  = s.cota,
+            daily_return = s.daily_return,
+        ))
 
     db.flush()
     logger.info("Sync legacy snapshots: %d registros, %s → %s",

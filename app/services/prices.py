@@ -151,36 +151,37 @@ def _fetch_and_store(
         logger.warning("Falha ao buscar %s: %s", asset.ticker, exc)
         return
 
-    from sqlalchemy.exc import IntegrityError
-
-    today   = date.today()
-    cutoff  = today - timedelta(days=2)
+    today  = date.today()
+    cutoff = today - timedelta(days=2)
 
     # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
     series = series[~series.index.duplicated(keep="last")]
+    clean  = {dt: float(p) for dt, p in series.items() if not pd.isna(p)}
+    if not clean:
+        return
 
-    for dt, price_val in series.items():
-        if pd.isna(price_val):
-            continue
-        existing = db.query(AssetPrice).filter_by(
-            asset_id=asset.id, date=dt
-        ).first()
-        if existing:
-            if dt >= cutoff:   # atualiza apenas preços recentes
-                existing.price = float(price_val)
-        else:
-            sp = db.begin_nested()   # savepoint — protege a transação externa
-            try:
-                db.add(AssetPrice(
-                    asset_id=asset.id, date=dt,
-                    price=float(price_val), source="market",
-                ))
-                sp.commit()
-            except IntegrityError:
-                sp.rollback()        # undo só este insert
-                existing = db.query(AssetPrice).filter_by(asset_id=asset.id, date=dt).first()
-                if existing and dt >= cutoff:
-                    existing.price = float(price_val)
+    # Bulk-fetch existing dates for this asset
+    existing_dates = set(
+        row.date for row in
+        db.query(AssetPrice.date).filter_by(asset_id=asset.id).all()
+    )
+
+    # Delete recent records so they can be re-inserted with fresh prices
+    recent = [dt for dt in clean if dt >= cutoff]
+    if recent:
+        db.query(AssetPrice).filter(
+            AssetPrice.asset_id == asset.id,
+            AssetPrice.date.in_(recent),
+        ).delete(synchronize_session=False)
+        existing_dates -= set(recent)
+
+    # Insert missing records
+    for dt, price_val in clean.items():
+        if dt not in existing_dates:
+            db.add(AssetPrice(
+                asset_id=asset.id, date=dt,
+                price=price_val, source="market",
+            ))
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────
