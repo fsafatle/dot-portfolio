@@ -151,9 +151,6 @@ def _fetch_and_store(
         logger.warning("Falha ao buscar %s: %s", asset.ticker, exc)
         return
 
-    today  = date.today()
-    cutoff = today - timedelta(days=2)
-
     # Deduplicate & normalize to datetime.date (Yahoo returns pd.Timestamp)
     series = series[~series.index.duplicated(keep="last")]
     clean = {
@@ -163,22 +160,34 @@ def _fetch_and_store(
     if not clean:
         return
 
-    if not clean:
-        return
-
-    min_date = min(clean)
-    max_date = max(clean)
-
-    # Delete the entire date range for this asset, then re-insert fresh data.
-    # Using synchronize_session="fetch" keeps the ORM identity map consistent.
-    db.query(AssetPrice).filter(
-        AssetPrice.asset_id == asset.id,
-        AssetPrice.date >= min_date,
-        AssetPrice.date <= max_date,
-    ).delete(synchronize_session="fetch")
-
-    for dt, price_val in clean.items():
-        db.add(AssetPrice(asset_id=asset.id, date=dt, price=price_val, source="market"))
+    try:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        rows = [
+            {"asset_id": asset.id, "date": dt, "price": float(p), "source": "market"}
+            for dt, p in clean.items()
+        ]
+        stmt = pg_insert(AssetPrice).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["asset_id", "date"],
+            set_={
+                "price": stmt.excluded.price,
+                "source": stmt.excluded.source,
+            },
+        )
+        db.execute(stmt)
+    except Exception:
+        # Fallback para bancos não-PostgreSQL
+        min_date = min(clean)
+        max_date = max(clean)
+        db.query(AssetPrice).filter(
+            AssetPrice.asset_id == asset.id,
+            AssetPrice.date >= min_date,
+            AssetPrice.date <= max_date,
+        ).delete(synchronize_session="fetch")
+        db.flush()
+        for dt, price_val in clean.items():
+            db.add(AssetPrice(asset_id=asset.id, date=dt, price=float(price_val), source="market"))
+        db.flush()
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────

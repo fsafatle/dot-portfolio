@@ -153,13 +153,11 @@ def _upsert_prices(
     db: Session, asset_id: int, series: pd.Series, source: str
 ) -> None:
     """
-    Insert new price rows. Only overwrite prices from the last 2 days
-    (to capture same-day intraday updates). Historical prices are kept stable
-    so that snapshot calculations don't drift between refreshes.
-    """
-    today  = date.today()
-    cutoff = today - timedelta(days=2)
+    Upsert price rows using PostgreSQL ON CONFLICT DO UPDATE.
 
+    Avoids DELETE+INSERT so that auto-increment sequence desync in the DB
+    (e.g. after manual bulk inserts) never causes a primary key violation.
+    """
     # Deduplicate & normalize to datetime.date (Yahoo returns pd.Timestamp)
     series = series[~series.index.duplicated(keep="last")]
     clean = {
@@ -169,22 +167,34 @@ def _upsert_prices(
     if not clean:
         return
 
-    if not clean:
-        return
-
-    min_date = min(clean)
-    max_date = max(clean)
-
-    # Delete the entire date range for this asset, then re-insert fresh data.
-    # Using synchronize_session="fetch" keeps the ORM identity map consistent.
-    db.query(Price).filter(
-        Price.asset_id == asset_id,
-        Price.date >= min_date,
-        Price.date <= max_date,
-    ).delete(synchronize_session="fetch")
-
-    for dt, price in clean.items():
-        db.add(Price(asset_id=asset_id, date=dt, close_price=price, source=source))
+    try:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        rows = [
+            {"asset_id": asset_id, "date": dt, "close_price": float(p), "source": source}
+            for dt, p in clean.items()
+        ]
+        stmt = pg_insert(Price).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["asset_id", "date"],
+            set_={
+                "close_price": stmt.excluded.close_price,
+                "source": stmt.excluded.source,
+            },
+        )
+        db.execute(stmt)
+    except Exception:
+        # Fallback para bancos não-PostgreSQL (e.g. SQLite em testes locais)
+        min_date = min(clean)
+        max_date = max(clean)
+        db.query(Price).filter(
+            Price.asset_id == asset_id,
+            Price.date >= min_date,
+            Price.date <= max_date,
+        ).delete(synchronize_session="fetch")
+        db.flush()
+        for dt, price in clean.items():
+            db.add(Price(asset_id=asset_id, date=dt, close_price=float(price), source=source))
+        db.flush()
 
 
 def upsert_manual_price(db: Session, asset_id: int, price_date: date, price: float) -> None:
