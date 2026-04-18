@@ -310,11 +310,18 @@ def build_snapshots(
         return
 
     prices_df = prices_df.ffill()
+
+    # Normalize index to datetime.date — pandas converts Date values to pd.Timestamp
+    # which psycopg2 cannot write to a PostgreSQL DATE column (causes ProgrammingError)
+    def _to_date(d):
+        return d.date() if hasattr(d, "date") and callable(d.date) else d
+
+    prices_df.index = pd.Index([_to_date(d) for d in prices_df.index])
     trading_dates = sorted(prices_df.index)
 
     if force_rebuild:
-        db.query(PortfolioSnapshot).delete()
-        db.commit()
+        db.query(PortfolioSnapshot).delete(synchronize_session="fetch")
+        db.flush()
 
     # ── Determine starting point ───────────────────────────────────────────
     last_snap = (
@@ -340,6 +347,12 @@ def build_snapshots(
     if not dates_to_process:
         logger.info("Snapshots already up to date")
         return
+
+    # Defensively remove any snapshots that might exist for dates we're about to write
+    db.query(PortfolioSnapshot).filter(
+        PortfolioSnapshot.date >= min(dates_to_process)
+    ).delete(synchronize_session="fetch")
+    db.flush()
 
     # ── Main loop ─────────────────────────────────────────────────────────
     all_dates = trading_dates  # needed to find prev_date

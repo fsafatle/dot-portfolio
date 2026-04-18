@@ -60,13 +60,22 @@ def refresh_portfolio(key: str):
         else:
             logger.info("Motor legado — usando build_snapshots")
             engine.refresh_prices(db, start=date.fromisoformat(start_date))
-            engine.build_snapshots(db, start_date_str=start_date, base_value=base_value)
+            engine.build_snapshots(
+                db,
+                force_rebuild=True,
+                start_date_str=start_date,
+                base_value=base_value,
+            )
             logger.info("  Snapshots reconstruídos (legado)")
 
     except Exception as e:
         import traceback
         logger.error(f"  ERRO ao atualizar {key}: {e}")
         logger.error(traceback.format_exc())
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise
     finally:
         db.close()

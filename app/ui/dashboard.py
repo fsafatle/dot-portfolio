@@ -202,10 +202,13 @@ def render_dashboard(portfolio_cfg: dict) -> None:
         st.markdown("<div style='padding-top:12px'></div>", unsafe_allow_html=True)
         refresh_clicked = st.button("↻ Refresh", use_container_width=True)
         # Mostra data do último snapshot disponível
+        _ld = None
         _db_check = get_db_for(key)
         try:
             from app.portfolio.performance import latest_snapshot_date as _last_date
             _ld = _last_date(_db_check)
+        except Exception:
+            pass
         finally:
             _db_check.close()
         if _ld:
@@ -216,6 +219,7 @@ def render_dashboard(portfolio_cfg: dict) -> None:
             )
 
     if refresh_clicked:
+        _refresh_err = None
         with st.spinner("Atualizando…"):
             db = get_db_for(key)
             try:
@@ -251,11 +255,25 @@ def render_dashboard(portfolio_cfg: dict) -> None:
                     engine.refresh_prices(db, start=date.fromisoformat(start_date))
                     engine.build_snapshots(
                         db,
+                        force_rebuild=True,
                         start_date_str=start_date,
                         base_value=portfolio_cfg.get("base_value", 1.0),
                     )
+            except Exception as exc:
+                _refresh_err = exc
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
             finally:
                 db.close()
+
+        if _refresh_err:
+            st.error(
+                f"❌ Erro ao atualizar dados: {_refresh_err}\n\n"
+                f"Tente novamente. Se o erro persistir, verifique os logs."
+            )
+        else:
             st.cache_data.clear()
             st.rerun()
 
