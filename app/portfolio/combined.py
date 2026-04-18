@@ -25,8 +25,28 @@ from app.market_data.cpi_provider import fetch_cpi_daily
 from app.market_data.ipca_provider import fetch_ipca_daily
 
 
+def _norm_index(s: pd.Series) -> pd.Series:
+    """Normalize a Series index to plain datetime.date objects.
+
+    pandas converts dict[date → float] keys to pd.Timestamp automatically.
+    fetch_usdbrl returns a .date numpy array (datetime.date).
+    Mixing both in set-union / reindex causes silent misalignment → NaN FX values
+    → BRL→USD conversion silently disappears.
+    """
+    new_idx = [
+        d.date() if hasattr(d, "date") and callable(d.date) else d
+        for d in s.index
+    ]
+    return pd.Series(s.values, index=new_idx)
+
+
+def _to_date(d) -> date:
+    """Coerce pd.Timestamp / datetime to plain datetime.date."""
+    return d.date() if hasattr(d, "date") and callable(d.date) else d
+
+
 def _common_start(global_snap: pd.Series, brazil_snap: pd.Series) -> date:
-    return max(global_snap.index[0], brazil_snap.index[0])
+    return max(_to_date(global_snap.index[0]), _to_date(brazil_snap.index[0]))
 
 
 def _get_snaps(cutoff: Optional[date]) -> tuple[pd.Series, pd.Series]:
@@ -72,13 +92,18 @@ def compute_dot_series(
     if global_snap.empty or brazil_snap.empty:
         return pd.Series(dtype=float)
 
+    # Normalize all indexes to datetime.date (snapshot_series returns pd.Timestamp,
+    # fetch_usdbrl returns datetime.date — mixing them in set union causes NaN misalignment)
+    global_snap = _norm_index(global_snap)
+    brazil_snap = _norm_index(brazil_snap)
+
     t0    = _common_start(global_snap, brazil_snap)
-    t_end = cutoff or min(global_snap.index[-1], brazil_snap.index[-1])
+    t_end = _to_date(cutoff or min(global_snap.index[-1], brazil_snap.index[-1]))
 
     global_snap = global_snap[global_snap.index >= t0]
     brazil_snap = brazil_snap[brazil_snap.index >= t0]
 
-    fx = fetch_usdbrl(t0, t_end)
+    fx = _norm_index(fetch_usdbrl(t0, t_end))
     if fx.empty:
         return pd.Series(dtype=float)
 
@@ -142,6 +167,9 @@ def compute_global_usd_norm(cutoff: Optional[date] = None) -> pd.Series:
     if global_snap.empty or brazil_snap.empty:
         return pd.Series(dtype=float)
 
+    global_snap = _norm_index(global_snap)
+    brazil_snap = _norm_index(brazil_snap)
+
     t0 = _common_start(global_snap, brazil_snap)
     global_snap = global_snap[global_snap.index >= t0]
     if global_snap.empty:
@@ -156,11 +184,14 @@ def compute_brazil_usd_norm(cutoff: Optional[date] = None) -> pd.Series:
     if global_snap.empty or brazil_snap.empty:
         return pd.Series(dtype=float)
 
-    t0 = _common_start(global_snap, brazil_snap)
-    t_end = cutoff or min(global_snap.index[-1], brazil_snap.index[-1])
+    global_snap = _norm_index(global_snap)
+    brazil_snap = _norm_index(brazil_snap)
+
+    t0    = _common_start(global_snap, brazil_snap)
+    t_end = _to_date(cutoff or min(global_snap.index[-1], brazil_snap.index[-1]))
 
     brazil_snap = brazil_snap[brazil_snap.index >= t0]
-    fx = fetch_usdbrl(t0, t_end)
+    fx = _norm_index(fetch_usdbrl(t0, t_end))
 
     if brazil_snap.empty or fx.empty:
         return pd.Series(dtype=float)
@@ -246,8 +277,11 @@ def compute_blended_benchmark(
     if global_snap.empty or brazil_snap.empty:
         return pd.Series(dtype=float)
 
+    global_snap = _norm_index(global_snap)
+    brazil_snap = _norm_index(brazil_snap)
+
     t0    = _common_start(global_snap, brazil_snap)
-    t_end = cutoff or date.today()
+    t_end = _to_date(cutoff or date.today())
 
     # CPI (USD) com multiplicador
     cpi_raw = fetch_cpi_daily(t0, t_end)
@@ -262,7 +296,7 @@ def compute_blended_benchmark(
     ipca = _apply_multiplier(ipca_raw, multiplier)
 
     # FX para converter IPCA BRL → USD
-    fx = fetch_usdbrl(t0, t_end)
+    fx = _norm_index(fetch_usdbrl(t0, t_end))
     if fx.empty:
         return pd.Series(dtype=float)
 
