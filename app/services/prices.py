@@ -163,35 +163,22 @@ def _fetch_and_store(
     if not clean:
         return
 
-    dialect = db.bind.dialect.name
+    if not clean:
+        return
 
-    if dialect == "postgresql":
-        # Native PostgreSQL upsert — never raises IntegrityError
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-        stmt = pg_insert(AssetPrice.__table__).values([
-            {"asset_id": asset.id, "date": dt, "price": price_val, "source": "market"}
-            for dt, price_val in clean.items()
-        ]).on_conflict_do_nothing(index_elements=["asset_id", "date"])
-        db.execute(stmt)
-        # Update recent prices with fresh values
-        for dt, price_val in clean.items():
-            if dt >= cutoff:
-                db.query(AssetPrice).filter_by(asset_id=asset.id, date=dt).update(
-                    {"price": price_val}, synchronize_session=False
-                )
-    else:
-        # SQLite fallback (local dev)
-        existing_dates = set(
-            row.date for row in db.query(AssetPrice.date).filter_by(asset_id=asset.id).all()
-        )
-        for dt, price_val in clean.items():
-            if dt in existing_dates:
-                if dt >= cutoff:
-                    db.query(AssetPrice).filter_by(asset_id=asset.id, date=dt).update(
-                        {"price": price_val}, synchronize_session=False
-                    )
-            else:
-                db.add(AssetPrice(asset_id=asset.id, date=dt, price=price_val, source="market"))
+    min_date = min(clean)
+    max_date = max(clean)
+
+    # Delete the entire date range for this asset, then re-insert fresh data.
+    # Using synchronize_session="fetch" keeps the ORM identity map consistent.
+    db.query(AssetPrice).filter(
+        AssetPrice.asset_id == asset.id,
+        AssetPrice.date >= min_date,
+        AssetPrice.date <= max_date,
+    ).delete(synchronize_session="fetch")
+
+    for dt, price_val in clean.items():
+        db.add(AssetPrice(asset_id=asset.id, date=dt, price=price_val, source="market"))
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────

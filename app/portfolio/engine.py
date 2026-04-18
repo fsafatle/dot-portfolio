@@ -169,36 +169,22 @@ def _upsert_prices(
     if not clean:
         return
 
-    dialect = db.bind.dialect.name
+    if not clean:
+        return
 
-    if dialect == "postgresql":
-        # Native PostgreSQL upsert — never raises IntegrityError
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-        # Batch insert all records, skipping conflicts (historical prices preserved)
-        stmt = pg_insert(Price.__table__).values([
-            {"asset_id": asset_id, "date": dt, "close_price": price, "source": source}
-            for dt, price in clean.items()
-        ]).on_conflict_do_nothing(index_elements=["asset_id", "date"])
-        db.execute(stmt)
-        # Update recent prices (last 2 days) with fresh values
-        for dt, price in clean.items():
-            if dt >= cutoff:
-                db.query(Price).filter_by(asset_id=asset_id, date=dt).update(
-                    {"close_price": price}, synchronize_session=False
-                )
-    else:
-        # SQLite fallback (local dev)
-        existing_dates = set(
-            row.date for row in db.query(Price.date).filter_by(asset_id=asset_id).all()
-        )
-        for dt, price in clean.items():
-            if dt in existing_dates:
-                if dt >= cutoff:
-                    db.query(Price).filter_by(asset_id=asset_id, date=dt).update(
-                        {"close_price": price}, synchronize_session=False
-                    )
-            else:
-                db.add(Price(asset_id=asset_id, date=dt, close_price=price, source=source))
+    min_date = min(clean)
+    max_date = max(clean)
+
+    # Delete the entire date range for this asset, then re-insert fresh data.
+    # Using synchronize_session="fetch" keeps the ORM identity map consistent.
+    db.query(Price).filter(
+        Price.asset_id == asset_id,
+        Price.date >= min_date,
+        Price.date <= max_date,
+    ).delete(synchronize_session="fetch")
+
+    for dt, price in clean.items():
+        db.add(Price(asset_id=asset_id, date=dt, close_price=price, source=source))
 
 
 def upsert_manual_price(db: Session, asset_id: int, price_date: date, price: float) -> None:
