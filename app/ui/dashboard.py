@@ -201,6 +201,19 @@ def render_dashboard(portfolio_cfg: dict) -> None:
     with col_refresh:
         st.markdown("<div style='padding-top:12px'></div>", unsafe_allow_html=True)
         refresh_clicked = st.button("↻ Refresh", use_container_width=True)
+        # Mostra data do último snapshot disponível
+        _db_check = get_db_for(key)
+        try:
+            from app.portfolio.performance import latest_snapshot_date as _last_date
+            _ld = _last_date(_db_check)
+        finally:
+            _db_check.close()
+        if _ld:
+            st.markdown(
+                f"<div style='font-size:0.7rem;color:#ABABAB;text-align:center;margin-top:2px'>"
+                f"Atualizado em<br><b>{_ld.strftime('%d/%m/%Y')}</b></div>",
+                unsafe_allow_html=True,
+            )
 
     if refresh_clicked:
         with st.spinner("Atualizando…"):
