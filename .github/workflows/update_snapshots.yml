@@ -6,7 +6,7 @@ name: Atualizar Snapshots Diários
 # ──────────────────────────────────────────────────────────────────
 on:
   schedule:
-    - cron: "0 22 * * 1-5"  # segunda a sexta às 19h BRT (22h UTC)
+    - cron: "30 22 * * 1-5" # segunda a sexta às 19:30 BRT (22:30 UTC)
   workflow_dispatch:          # permite rodar manualmente pelo GitHub
 
 jobs:

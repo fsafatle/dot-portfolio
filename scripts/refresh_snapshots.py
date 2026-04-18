@@ -64,7 +64,9 @@ def refresh_portfolio(key: str):
             logger.info("  Snapshots reconstruídos (legado)")
 
     except Exception as e:
+        import traceback
         logger.error(f"  ERRO ao atualizar {key}: {e}")
+        logger.error(traceback.format_exc())
         raise
     finally:
         db.close()

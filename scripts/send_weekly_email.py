@@ -176,7 +176,7 @@ def _portfolio_block(flag, name, currency, data, bench_lines):
     return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
 
 
-def build_slack_payload(g, b, d, report_date):
+def build_slack_payload(g, b, d, report_date, stale_warning=False):
     week_str = report_date.strftime("%d/%m/%Y")
     prev_str = (report_date - timedelta(days=7)).strftime("%d/%m/%Y")
 
@@ -206,6 +206,15 @@ def build_slack_payload(g, b, d, report_date):
             "type": "context",
             "elements": [{"type": "mrkdwn", "text": f"📅 Dados de referência: *{week_str}*"}]
         },
+    ]
+
+    if stale_warning:
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "⚠️ *Dados desatualizados* — atualização automática falhou. Verifique o GitHub Actions."}]
+        })
+
+    blocks += [
         {"type": "divider"},
 
         # DOT
@@ -256,15 +265,12 @@ if __name__ == "__main__":
     report_date = max((dt for dt in candidates if dt is not None), default=date.today())
     print(f"📅 Data de referência: {report_date}")
 
-    # Abort if data is stale (more than 3 calendar days old)
     staleness = (date.today() - report_date).days
-    if staleness > 3:
-        print(
-            f"⚠️  Dados desatualizados ({report_date}, {staleness} dias atrás). "
-            f"Verifique o processo de atualização de snapshots. Envio cancelado."
-        )
-        sys.exit(0)
+    stale_warning = staleness > 3
+
+    if stale_warning:
+        print(f"⚠️  Dados desatualizados ({report_date}, {staleness} dias atrás). Enviando com aviso.")
 
     print("💬 Enviando para Slack...")
-    payload = build_slack_payload(g, b, d, report_date)
+    payload = build_slack_payload(g, b, d, report_date, stale_warning=stale_warning)
     send_slack(payload)
