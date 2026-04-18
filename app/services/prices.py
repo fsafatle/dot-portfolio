@@ -110,6 +110,22 @@ def get_latest_price_date(db: Session, asset_id: int) -> Optional[date]:
 
 # ── Refresh de mercado ───────────────────────────────────────────────────────
 
+def _reset_asset_prices_sequence(db: Session) -> None:
+    """Resync asset_prices.id sequence with actual MAX(id) in the table."""
+    try:
+        from sqlalchemy import text
+        db.execute(text(
+            "SELECT setval("
+            "  pg_get_serial_sequence('asset_prices', 'id'),"
+            "  COALESCE((SELECT MAX(id) FROM asset_prices), 0) + 1,"
+            "  false"
+            ")"
+        ))
+        db.flush()
+    except Exception as exc:
+        logger.warning("Could not reset asset_prices sequence: %s", exc)
+
+
 def refresh_prices_for_portfolio(
     db: Session,
     portfolio_id: int,
@@ -124,6 +140,9 @@ def refresh_prices_for_portfolio(
 
     end   = end   or date.today()
     start = start or port.base_date
+
+    # Ensure sequence is in sync before any INSERT
+    _reset_asset_prices_sequence(db)
 
     assets = db.query(Asset).filter_by(
         portfolio_id=portfolio_id, is_active=True
@@ -160,34 +179,19 @@ def _fetch_and_store(
     if not clean:
         return
 
-    try:
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-        rows = [
-            {"asset_id": asset.id, "date": dt, "price": float(p), "source": "market"}
-            for dt, p in clean.items()
-        ]
-        stmt = pg_insert(AssetPrice).values(rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["asset_id", "date"],
-            set_={
-                "price": stmt.excluded.price,
-                "source": stmt.excluded.source,
-            },
-        )
-        db.execute(stmt)
-    except Exception:
-        # Fallback para bancos não-PostgreSQL
-        min_date = min(clean)
-        max_date = max(clean)
-        db.query(AssetPrice).filter(
-            AssetPrice.asset_id == asset.id,
-            AssetPrice.date >= min_date,
-            AssetPrice.date <= max_date,
-        ).delete(synchronize_session="fetch")
-        db.flush()
-        for dt, price_val in clean.items():
-            db.add(AssetPrice(asset_id=asset.id, date=dt, price=float(price_val), source="market"))
-        db.flush()
+    min_date = min(clean)
+    max_date = max(clean)
+
+    db.query(AssetPrice).filter(
+        AssetPrice.asset_id == asset.id,
+        AssetPrice.date >= min_date,
+        AssetPrice.date <= max_date,
+    ).delete(synchronize_session="fetch")
+    db.flush()
+
+    for dt, price_val in clean.items():
+        db.add(AssetPrice(asset_id=asset.id, date=dt, price=float(price_val), source="market"))
+    db.flush()
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────

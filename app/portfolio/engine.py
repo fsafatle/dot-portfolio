@@ -121,6 +121,28 @@ def update_allocations(
 # Price management
 # ---------------------------------------------------------------------------
 
+def _reset_prices_sequence(db: Session) -> None:
+    """
+    Resync the auto-increment sequence for prices.id with the actual MAX(id).
+
+    Necessary when the table was populated via bulk INSERT with explicit IDs
+    (e.g. migrations), which leaves the sequence below the real max ID.
+    Without this, subsequent INSERTs generate IDs that already exist → PK error.
+    """
+    try:
+        from sqlalchemy import text
+        db.execute(text(
+            "SELECT setval("
+            "  pg_get_serial_sequence('prices', 'id'),"
+            "  COALESCE((SELECT MAX(id) FROM prices), 0) + 1,"
+            "  false"
+            ")"
+        ))
+        db.flush()
+    except Exception as exc:
+        logger.warning("Could not reset prices sequence (non-PostgreSQL?): %s", exc)
+
+
 def refresh_prices(
     db: Session,
     start: Optional[date] = None,
@@ -136,6 +158,10 @@ def refresh_prices(
         start = date.fromisoformat(PORTFOLIO_START_DATE)
     if end is None:
         end = date.today()
+
+    # Ensure the sequence is in sync before any INSERT (fixes desync caused by
+    # bulk migrations that inserted rows with explicit IDs).
+    _reset_prices_sequence(db)
 
     assets = db.query(Asset).filter_by(is_active=True).all()
     for asset in assets:
@@ -153,10 +179,10 @@ def _upsert_prices(
     db: Session, asset_id: int, series: pd.Series, source: str
 ) -> None:
     """
-    Upsert price rows using PostgreSQL ON CONFLICT DO UPDATE.
+    Upsert price rows via DELETE-range + INSERT.
 
-    Avoids DELETE+INSERT so that auto-increment sequence desync in the DB
-    (e.g. after manual bulk inserts) never causes a primary key violation.
+    The sequence is reset by the caller (refresh_prices) before the first
+    call to this function, so INSERT never conflicts with existing rows.
     """
     # Deduplicate & normalize to datetime.date (Yahoo returns pd.Timestamp)
     series = series[~series.index.duplicated(keep="last")]
@@ -167,34 +193,19 @@ def _upsert_prices(
     if not clean:
         return
 
-    try:
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-        rows = [
-            {"asset_id": asset_id, "date": dt, "close_price": float(p), "source": source}
-            for dt, p in clean.items()
-        ]
-        stmt = pg_insert(Price).values(rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["asset_id", "date"],
-            set_={
-                "close_price": stmt.excluded.close_price,
-                "source": stmt.excluded.source,
-            },
-        )
-        db.execute(stmt)
-    except Exception:
-        # Fallback para bancos não-PostgreSQL (e.g. SQLite em testes locais)
-        min_date = min(clean)
-        max_date = max(clean)
-        db.query(Price).filter(
-            Price.asset_id == asset_id,
-            Price.date >= min_date,
-            Price.date <= max_date,
-        ).delete(synchronize_session="fetch")
-        db.flush()
-        for dt, price in clean.items():
-            db.add(Price(asset_id=asset_id, date=dt, close_price=float(price), source=source))
-        db.flush()
+    min_date = min(clean)
+    max_date = max(clean)
+
+    db.query(Price).filter(
+        Price.asset_id == asset_id,
+        Price.date >= min_date,
+        Price.date <= max_date,
+    ).delete(synchronize_session="fetch")
+    db.flush()
+
+    for dt, price in clean.items():
+        db.add(Price(asset_id=asset_id, date=dt, close_price=float(price), source=source))
+    db.flush()
 
 
 def upsert_manual_price(db: Session, asset_id: int, price_date: date, price: float) -> None:
