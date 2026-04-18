@@ -160,9 +160,8 @@ def _upsert_prices(
     today  = date.today()
     cutoff = today - timedelta(days=2)
 
-    # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
+    # Deduplicate & normalize to datetime.date (Yahoo returns pd.Timestamp)
     series = series[~series.index.duplicated(keep="last")]
-    # Normalize index to datetime.date (Yahoo returns pd.Timestamp which has different hash)
     clean = {
         (dt.date() if hasattr(dt, "date") and callable(dt.date) else dt): float(p)
         for dt, p in series.items() if not pd.isna(p)
@@ -170,26 +169,36 @@ def _upsert_prices(
     if not clean:
         return
 
-    # Bulk-fetch existing dates for this asset (already datetime.date from SQLAlchemy)
-    existing_dates = set(
-        row.date for row in
-        db.query(Price.date).filter_by(asset_id=asset_id).all()
-    )
+    dialect = db.bind.dialect.name
 
-    # Delete recent records so they can be re-inserted with fresh prices
-    recent = [dt for dt in clean if dt >= cutoff]
-    if recent:
-        db.query(Price).filter(
-            Price.asset_id == asset_id,
-            Price.date.in_(recent),
-        ).delete(synchronize_session=False)
-        db.flush()
-        existing_dates -= set(recent)
-
-    # Insert missing records
-    for dt, price in clean.items():
-        if dt not in existing_dates:
-            db.add(Price(asset_id=asset_id, date=dt, close_price=price, source=source))
+    if dialect == "postgresql":
+        # Native PostgreSQL upsert — never raises IntegrityError
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        # Batch insert all records, skipping conflicts (historical prices preserved)
+        stmt = pg_insert(Price.__table__).values([
+            {"asset_id": asset_id, "date": dt, "close_price": price, "source": source}
+            for dt, price in clean.items()
+        ]).on_conflict_do_nothing(index_elements=["asset_id", "date"])
+        db.execute(stmt)
+        # Update recent prices (last 2 days) with fresh values
+        for dt, price in clean.items():
+            if dt >= cutoff:
+                db.query(Price).filter_by(asset_id=asset_id, date=dt).update(
+                    {"close_price": price}, synchronize_session=False
+                )
+    else:
+        # SQLite fallback (local dev)
+        existing_dates = set(
+            row.date for row in db.query(Price.date).filter_by(asset_id=asset_id).all()
+        )
+        for dt, price in clean.items():
+            if dt in existing_dates:
+                if dt >= cutoff:
+                    db.query(Price).filter_by(asset_id=asset_id, date=dt).update(
+                        {"close_price": price}, synchronize_session=False
+                    )
+            else:
+                db.add(Price(asset_id=asset_id, date=dt, close_price=price, source=source))
 
 
 def upsert_manual_price(db: Session, asset_id: int, price_date: date, price: float) -> None:

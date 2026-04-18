@@ -154,9 +154,8 @@ def _fetch_and_store(
     today  = date.today()
     cutoff = today - timedelta(days=2)
 
-    # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
+    # Deduplicate & normalize to datetime.date (Yahoo returns pd.Timestamp)
     series = series[~series.index.duplicated(keep="last")]
-    # Normalize index to datetime.date (Yahoo returns pd.Timestamp which has different hash)
     clean = {
         (dt.date() if hasattr(dt, "date") and callable(dt.date) else dt): float(p)
         for dt, p in series.items() if not pd.isna(p)
@@ -164,29 +163,35 @@ def _fetch_and_store(
     if not clean:
         return
 
-    # Bulk-fetch existing dates for this asset (already datetime.date from SQLAlchemy)
-    existing_dates = set(
-        row.date for row in
-        db.query(AssetPrice.date).filter_by(asset_id=asset.id).all()
-    )
+    dialect = db.bind.dialect.name
 
-    # Delete recent records so they can be re-inserted with fresh prices
-    recent = [dt for dt in clean if dt >= cutoff]
-    if recent:
-        db.query(AssetPrice).filter(
-            AssetPrice.asset_id == asset.id,
-            AssetPrice.date.in_(recent),
-        ).delete(synchronize_session=False)
-        db.flush()
-        existing_dates -= set(recent)
-
-    # Insert missing records
-    for dt, price_val in clean.items():
-        if dt not in existing_dates:
-            db.add(AssetPrice(
-                asset_id=asset.id, date=dt,
-                price=price_val, source="market",
-            ))
+    if dialect == "postgresql":
+        # Native PostgreSQL upsert — never raises IntegrityError
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        stmt = pg_insert(AssetPrice.__table__).values([
+            {"asset_id": asset.id, "date": dt, "price": price_val, "source": "market"}
+            for dt, price_val in clean.items()
+        ]).on_conflict_do_nothing(index_elements=["asset_id", "date"])
+        db.execute(stmt)
+        # Update recent prices with fresh values
+        for dt, price_val in clean.items():
+            if dt >= cutoff:
+                db.query(AssetPrice).filter_by(asset_id=asset.id, date=dt).update(
+                    {"price": price_val}, synchronize_session=False
+                )
+    else:
+        # SQLite fallback (local dev)
+        existing_dates = set(
+            row.date for row in db.query(AssetPrice.date).filter_by(asset_id=asset.id).all()
+        )
+        for dt, price_val in clean.items():
+            if dt in existing_dates:
+                if dt >= cutoff:
+                    db.query(AssetPrice).filter_by(asset_id=asset.id, date=dt).update(
+                        {"price": price_val}, synchronize_session=False
+                    )
+            else:
+                db.add(AssetPrice(asset_id=asset.id, date=dt, price=price_val, source="market"))
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────
