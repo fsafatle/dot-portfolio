@@ -151,8 +151,13 @@ def _fetch_and_store(
         logger.warning("Falha ao buscar %s: %s", asset.ticker, exc)
         return
 
+    from sqlalchemy.exc import IntegrityError
+
     today   = date.today()
     cutoff  = today - timedelta(days=2)
+
+    # Deduplicate dates (Yahoo Finance occasionally returns duplicate entries)
+    series = series[~series.index.duplicated(keep="last")]
 
     for dt, price_val in series.items():
         if pd.isna(price_val):
@@ -164,10 +169,18 @@ def _fetch_and_store(
             if dt >= cutoff:   # atualiza apenas preços recentes
                 existing.price = float(price_val)
         else:
-            db.add(AssetPrice(
-                asset_id=asset.id, date=dt,
-                price=float(price_val), source="market",
-            ))
+            sp = db.begin_nested()   # savepoint — protege a transação externa
+            try:
+                db.add(AssetPrice(
+                    asset_id=asset.id, date=dt,
+                    price=float(price_val), source="market",
+                ))
+                sp.commit()
+            except IntegrityError:
+                sp.rollback()        # undo só este insert
+                existing = db.query(AssetPrice).filter_by(asset_id=asset.id, date=dt).first()
+                if existing and dt >= cutoff:
+                    existing.price = float(price_val)
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────
