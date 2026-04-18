@@ -5,13 +5,17 @@ from datetime import date
 import plotly.graph_objects as go
 import streamlit as st
 
+from datetime import timedelta
+
 from app.portfolio.combined import (
     compute_dot_series,
     compute_global_usd_norm,
     compute_brazil_usd_norm,
     compute_blended_benchmark,
     _returns_from_series,
+    _norm_index,
 )
+from app.market_data.fx_provider import fetch_usdbrl
 from app.ui.styles import inject_dot_css
 from app.config import PORTFOLIOS
 
@@ -42,6 +46,42 @@ _BENCH_MULTIPLIER = _CFG.get("bench_multiplier", 1.5)
 _BENCH_LABEL      = _CFG.get("bench_label", f"{_CFG.get('bench_multiplier', 1.5)}× CPI+IPCA (USD)")
 
 
+def _compute_fx_stats(cutoff: "date | None") -> dict:
+    """Retorna variação do BRL vs USD em vários horizontes.
+
+    Convenção: positivo = BRL valorizou (USDBRL caiu) → bom para portfólio em USD.
+               negativo = BRL desvalorizou (USDBRL subiu) → reduz retorno USD.
+    """
+    today = cutoff or date.today()
+    # Busca um ano de dados para ter referências de MTD / YTD / inception
+    start = today.replace(month=1, day=1) - timedelta(days=5)
+    fx = _norm_index(fetch_usdbrl(start, today))
+    if fx.empty:
+        return dict(daily=None, mtd=None, ytd=None)
+
+    def _brl_ret(t_start):
+        """BRL appreciation = USDBRL_start / USDBRL_end − 1 (positive = stronger BRL)."""
+        sub = fx[fx.index >= t_start]
+        if len(sub) < 2:
+            return None
+        return (sub.iloc[0] / sub.iloc[-1]) - 1.0
+
+    fx_today = fx.iloc[-1]
+
+    # Daily: comparado ao penúltimo ponto disponível
+    daily = ((fx.iloc[-2] / fx_today) - 1.0) if len(fx) >= 2 else None
+
+    # MTD
+    month_start = today.replace(day=1)
+    mtd = _brl_ret(month_start)
+
+    # YTD
+    year_start = today.replace(month=1, day=1)
+    ytd = _brl_ret(year_start)
+
+    return dict(daily=daily, mtd=mtd, ytd=ytd, rate=float(fx_today))
+
+
 @st.cache_data(ttl=300)
 def _load_dot(cutoff_str: str = "", w_global: float = 0.5, w_brazil: float = 0.5,
               rebal_freq: str = "monthly") -> dict:
@@ -53,7 +93,9 @@ def _load_dot(cutoff_str: str = "", w_global: float = 0.5, w_brazil: float = 0.5
     bench  = compute_blended_benchmark(cutoff=cutoff, w_brazil=w_brazil, w_global=w_global,
                                        multiplier=_BENCH_MULTIPLIER)
     stats  = _returns_from_series(dot)
-    return dict(dot=dot, global_norm=g_norm, brazil_norm=b_norm, bench=bench, stats=stats)
+    fx_stats = _compute_fx_stats(cutoff)
+    return dict(dot=dot, global_norm=g_norm, brazil_norm=b_norm,
+                bench=bench, stats=stats, fx_stats=fx_stats)
 
 
 def render_dot_dashboard() -> None:
@@ -175,6 +217,39 @@ def render_dot_dashboard() -> None:
             f"</div>",
             unsafe_allow_html=True,
         )
+
+    # ── Linha BRL vs USD ──────────────────────────────────────────────────────
+    fx_stats = data.get("fx_stats", {})
+
+    def _fx_chip(v):
+        """Formata variação BRL com cor e sinal."""
+        if v is None:
+            return "<span style='color:#ABABAB'>—</span>"
+        sign  = "+" if v >= 0 else ""
+        color = "#10b981" if v >= 0 else "#ef4444"
+        arrow = "▲" if v >= 0 else "▼"
+        return (
+            f"<span style='color:{color};font-weight:600'>"
+            f"{arrow} {sign}{v*100:.2f}%</span>"
+        )
+
+    _rate_str = (
+        f"<span style='color:#929292'>USDBRL {fx_stats['rate']:.4f}</span>"
+        if fx_stats.get("rate") else ""
+    )
+
+    st.markdown(
+        f"<div style='margin-top:-4px;margin-bottom:4px;padding:6px 14px;"
+        f"background:#F4F4F4;border-radius:8px;display:flex;gap:20px;"
+        f"align-items:center;flex-wrap:wrap;font-size:0.8rem;color:#5E5E5E'>"
+        f"<span style='font-weight:600;color:#929292'>🇧🇷 BRL vs USD</span>"
+        f"<span>Diário &nbsp;{_fx_chip(fx_stats.get('daily'))}</span>"
+        f"<span>MTD &nbsp;{_fx_chip(fx_stats.get('mtd'))}</span>"
+        f"<span>YTD &nbsp;{_fx_chip(fx_stats.get('ytd'))}</span>"
+        f"&nbsp;&nbsp;{_rate_str}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
     st.divider()
 
