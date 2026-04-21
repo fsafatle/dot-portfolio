@@ -1,12 +1,13 @@
 name: Atualizar Snapshots Diários
 
 # ──────────────────────────────────────────────────────────────────
-# Roda todo dia útil às 19h BRT (22h UTC) para atualizar preços
-# e snapshots antes do envio do Slack (20h BRT / 23h UTC).
+# Atualiza preços e snapshots ~30min antes do envio ao Slack.
+# Dispara 16:47 BRT (19:47 UTC). Minuto off-peak (:47) reduz atraso
+# do GH Actions free-tier. Alvo de chegada: ~18h BRT.
 # ──────────────────────────────────────────────────────────────────
 on:
   schedule:
-    - cron: "30 22 * * 1-5" # segunda a sexta às 19:30 BRT (22:30 UTC)
+    - cron: "47 19 * * 1-5"
   workflow_dispatch:          # permite rodar manualmente pelo GitHub
 
 jobs:

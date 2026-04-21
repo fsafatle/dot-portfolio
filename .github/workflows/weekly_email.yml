@@ -12,7 +12,9 @@ name: Resumo Diário DOT Portfolio (Slack)
 # ──────────────────────────────────────────────────────────────────
 on:
   schedule:
-    - cron: "0 23 * * 1-5" # segunda a sexta às 20h BRT (23h UTC)
+    # Alvo: chegar por volta das 18h BRT (dispara 17:17 BRT = 20:17 UTC).
+    # Minuto off-peak (:17) reduz atraso do GH Actions free-tier.
+    - cron: "17 20 * * 1-5"
   workflow_dispatch:        # permite rodar manualmente pelo GitHub
 
 jobs:
