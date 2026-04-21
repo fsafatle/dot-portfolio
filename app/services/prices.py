@@ -179,19 +179,40 @@ def _fetch_and_store(
     if not clean:
         return
 
-    min_date = min(clean)
-    max_date = max(clean)
-
-    db.query(AssetPrice).filter(
-        AssetPrice.asset_id == asset.id,
-        AssetPrice.date >= min_date,
-        AssetPrice.date <= max_date,
-    ).delete(synchronize_session="fetch")
-    db.flush()
-
-    for dt, price_val in clean.items():
-        db.add(AssetPrice(asset_id=asset.id, date=dt, price=float(price_val), source="market"))
-    db.flush()
+    try:
+        # Postgres: upsert por (asset_id, date). Não usa sequence de id, então
+        # não sofre com desync da PK (causa de UniqueViolation em id).
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        rows = [
+            {"asset_id": asset.id, "date": dt, "price": float(p), "source": "market"}
+            for dt, p in clean.items()
+        ]
+        stmt = pg_insert(AssetPrice).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["asset_id", "date"],
+            set_={
+                "price":  stmt.excluded.price,
+                "source": stmt.excluded.source,
+            },
+        )
+        db.execute(stmt)
+        db.flush()
+    except Exception:
+        # Fallback para bancos não-PostgreSQL (ex: SQLite local)
+        min_date = min(clean)
+        max_date = max(clean)
+        db.query(AssetPrice).filter(
+            AssetPrice.asset_id == asset.id,
+            AssetPrice.date >= min_date,
+            AssetPrice.date <= max_date,
+        ).delete(synchronize_session="fetch")
+        db.flush()
+        for dt, price_val in clean.items():
+            db.add(AssetPrice(
+                asset_id=asset.id, date=dt,
+                price=float(price_val), source="market",
+            ))
+        db.flush()
 
 
 # ── Migração: tabela legada (prices) → asset_prices ─────────────────────────
