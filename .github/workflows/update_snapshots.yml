@@ -1,0 +1,32 @@
+name: Atualizar Snapshots Diários
+
+# ──────────────────────────────────────────────────────────────────
+# Roda todo dia útil às 19h BRT (22h UTC) para atualizar preços
+# e snapshots antes do envio do Slack (20h BRT / 23h UTC).
+# ──────────────────────────────────────────────────────────────────
+on:
+  schedule:
+    - cron: "30 22 * * 1-5" # segunda a sexta às 19:30 BRT (22:30 UTC)
+  workflow_dispatch:          # permite rodar manualmente pelo GitHub
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Atualizar snapshots
+        env:
+          GLOBAL_DATABASE_URL: ${{ secrets.GLOBAL_DATABASE_URL }}
+          BRAZIL_DATABASE_URL: ${{ secrets.BRAZIL_DATABASE_URL }}
+        run: python scripts/refresh_snapshots.py

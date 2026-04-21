@@ -1,0 +1,39 @@
+name: Resumo Diário DOT Portfolio (Slack)
+
+# ──────────────────────────────────────────────────────────────────
+# HORÁRIO DE ENVIO:
+#   Formato cron: "MINUTO HORA_UTC * * *"
+#   BRT = UTC - 3  →  20h BRT = 23h UTC
+#
+#   Exemplos:
+#     "0 23 * * *"   → todos os dias às 20h BRT
+#     "0 12 * * 1"   → toda segunda-feira às 09h BRT
+#     "0 20 * * 1,5" → segunda e sexta às 17h BRT
+# ──────────────────────────────────────────────────────────────────
+on:
+  schedule:
+    - cron: "0 23 * * 1-5" # segunda a sexta às 20h BRT (23h UTC)
+  workflow_dispatch:        # permite rodar manualmente pelo GitHub
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Enviar email
+        env:
+          GLOBAL_DATABASE_URL: ${{ secrets.GLOBAL_DATABASE_URL }}
+          BRAZIL_DATABASE_URL: ${{ secrets.BRAZIL_DATABASE_URL }}
+          SLACK_WEBHOOK_URL:   ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python scripts/send_weekly_email.py
