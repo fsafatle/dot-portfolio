@@ -260,12 +260,18 @@ if __name__ == "__main__":
     b = collect_brazil()
     d = collect_dot()
 
-    # Use the most recent snapshot date across all portfolios
-    candidates = [g.get("last_date"), b.get("last_date")]
-    report_date = max((dt for dt in candidates if dt is not None), default=date.today())
+    # Use the most recent snapshot date across portfolios, mas NUNCA no
+    # futuro: snapshots com data > hoje (BRT) são artefatos (ex: run com TZ
+    # errado no passado) e não refletem uma cotação real de mercado.
+    today = date.today()
+    candidates = [
+        dt for dt in (g.get("last_date"), b.get("last_date"))
+        if dt is not None and dt <= today
+    ]
+    report_date = max(candidates, default=today)
     print(f"📅 Data de referência: {report_date}")
 
-    staleness = (date.today() - report_date).days
+    staleness = (today - report_date).days
     stale_warning = staleness > 3
 
     if stale_warning:
