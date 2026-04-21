@@ -20,6 +20,8 @@ on:
 jobs:
   send-email:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/Sao_Paulo  # garante que date.today() use horario de Brasilia
 
     steps:
       - name: Checkout código
