@@ -94,3 +94,4 @@ def get_session():
 def get_db() -> Session:
     """Sessão direta para o portfolio global (legado)."""
     return SessionLocal()
+
